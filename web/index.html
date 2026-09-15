@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>X Brut simulator</title>
+<style>
+body{margin:0;background:#d6d1c7;color:#171513;font:15px ui-monospace,monospace;text-align:center}h1{font-size:18px;margin:18px}#device{display:inline-block;background:#252525;border-radius:18px;padding:22px 18px 15px;box-shadow:0 4px 20px #777}canvas{display:block;width:240px;height:400px;background:#f7f4e9;image-rendering:pixelated}.buttons{display:flex;gap:8px;margin-top:14px;justify-content:center}button{font:inherit;background:#ddd;border:0;border-radius:5px;padding:8px 11px;cursor:pointer}button:active{background:#999}.hint{max-width:750px;margin:16px auto;color:#514b43}
+</style>
+<h1>X BRUT / XTEINK X4 SIMULATOR</h1>
+<div id=device><canvas width=480 height=800></canvas><div class=buttons><button data-b=left>BACK / SETTINGS</button><button data-b=confirm>OK</button><button data-b=up>▲</button><button data-b=down>▼</button><button data-b=power>POWER</button></div></div>
+<p class=hint>The canvas is the device’s raw portrait 480×800 one-bit framebuffer, scaled only by CSS.</p>
+<script>
+let c=document.querySelector('canvas'),x=c.getContext('2d'),im=x.createImageData(480,800);
+async function draw(){let b=new Uint8Array(await (await fetch('/api/screen')).arrayBuffer()),d=im.data;for(let y=0;y<800;y++)for(let q=0;q<60;q++)for(let bit=0;bit<8;bit++){let on=b[y*60+q]&(128>>bit),i=(y*480+q*8+bit)*4,v=on?0:247;d[i]=d[i+1]=d[i+2]=v;d[i+3]=255}x.putImageData(im,0,0)}
+document.querySelectorAll('button').forEach(e=>e.onclick=async()=>{await fetch('/api/button',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({button:e.dataset.b})});draw()});draw()
+let revision;async function hot(){try{let next=(await (await fetch('/api/reload',{cache:'no-store'})).json()).revision;if(revision&&revision!==next)location.reload();revision=next}catch(e){}}hot();setInterval(hot,800)
+</script>

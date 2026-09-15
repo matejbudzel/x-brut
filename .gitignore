@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+base-conf.json
+base.log
+.simulator/
+.tools/
+backups/
