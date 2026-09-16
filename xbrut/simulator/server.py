@@ -90,6 +90,8 @@ class Bitmap:
 
 class Platform:
     def __init__(self): self.bitmap = Bitmap(); self.frame = bytes(48000); self.wifi = False
+    def clear(self): self.bitmap.fill(0)
+    def pixel(self, x, y, on=True): self.bitmap[x, y] = 1 if on else 0
     def present(self, frame):
         self.frame = bytes(frame)
         self.bitmap.data[:] = self.frame

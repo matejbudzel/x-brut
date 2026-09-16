@@ -7,7 +7,7 @@ CONTENT_X = 18
 class BaseUI:
     """Reusable base screen template and deterministic button navigation."""
     def __init__(self, platform):
-        self.platform, self.frame, self.page, self.focus = platform, Framebuffer(platform.bitmap), "home", 0
+        self.platform, self.frame, self.page, self.focus = platform, Framebuffer(platform), "home", 0
         self.lines, self.actions = [], []
         self.title = "xBrut"
         self.bottom_labels, self.side_labels = ("", "", "", ""), ("", "")

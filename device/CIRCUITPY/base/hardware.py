@@ -5,25 +5,46 @@ class X4Platform:
     def __init__(self):
         self.display = board.DISPLAY
         self.display.rotation = 270
-        self.bitmap = displayio.Bitmap(480, 800, 2); self.palette = displayio.Palette(2)
-        self.palette[0], self.palette[1] = 0xffffff, 0x000000
-        group = displayio.Group(); group.append(displayio.TileGrid(self.bitmap, pixel_shader=self.palette)); self.display.root_group = group
-        # Allocate the display bitmap before importing optional Python libraries.
+        self._frame_path = "/.xbrut-frame.bmp"
+        self._frame = open(self._frame_path, "w+b")
+        # 480x800, 1-bit BMP. Rows are 60 bytes and naturally 4-byte aligned.
+        self._frame.write(
+            b"BM" + (48062).to_bytes(4, "little") + b"\0\0\0\0" + (62).to_bytes(4, "little") +
+            (40).to_bytes(4, "little") + (480).to_bytes(4, "little") + (800).to_bytes(4, "little") +
+            b"\1\0\1\0" + b"\0" * 16 + (2).to_bytes(4, "little") + b"\0" * 4 +
+            b"\xff\xff\xff\0\0\0\0\0"
+        )
+        self.clear()
         from adafruit_xteink_x4 import InputManager
         self.buttons = InputManager()
+    def _row_offset(self, y): return 62 + (799 - y) * 60
+    def _write_row(self, y, row):
+        self._frame.seek(self._row_offset(y)); self._frame.write(row)
+    def clear(self):
+        for y in range(800): self._write_row(y, b"\0" * 60)
+    def pixel(self, x, y, on=True):
+        offset, mask = self._row_offset(y) + x // 8, 128 >> (x & 7)
+        self._frame.seek(offset); value = self._frame.read(1)[0]
+        self._frame.seek(offset); self._frame.write(bytes((value | mask if on else value & ~mask,)))
     def present(self, packed):
         for y in range(800):
-            for x in range(480): self.bitmap[x, y] = 1 if packed[y * 60 + x // 8] & (128 >> (x & 7)) else 0
-        self.display.refresh()
+            self._write_row(y, packed[y * 60:(y + 1) * 60])
+        self.refresh()
     def present_file(self, path):
         """Refresh from a packed 1-bit file without allocating a second frame."""
         with open(path, "rb") as handle:
             for y in range(800):
                 row = handle.read(60)
                 if len(row) != 60: raise ValueError("invalid framebuffer size")
-                for x in range(480): self.bitmap[x, y] = 1 if row[x // 8] & (128 >> (x & 7)) else 0
+                self._write_row(y, row)
+        self.refresh()
+    def refresh(self):
+        self._frame.flush()
+        bitmap = displayio.OnDiskBitmap(self._frame_path)
+        group = displayio.Group()
+        group.append(displayio.TileGrid(bitmap, pixel_shader=bitmap.pixel_shader))
+        self.display.root_group = group
         self.display.refresh()
-    def refresh(self): self.display.refresh()
     def button(self):
         self.buttons.update()
         if not self.buttons.any_pressed: return None
