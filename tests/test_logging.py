@@ -3,8 +3,6 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from types import ModuleType
-from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,11 +14,7 @@ def load_logger():
     if spec is None or spec.loader is None:
         raise AssertionError("could not load xbrut_log.py")
     module = importlib.util.module_from_spec(spec)
-    paths = ModuleType("xbrut_paths")
-    paths.BASE_CONFIG_PATH = "/sd/base-conf.json"
-    paths.LOG_PATH = "/sd/base.log"
-    with patch.dict("sys.modules", {"xbrut_paths": paths}):
-        spec.loader.exec_module(module)
+    spec.loader.exec_module(module)
     return module
 
 

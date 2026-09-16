@@ -1,7 +1,6 @@
 {
   "include": [
     "device/CIRCUITPY/base/hardware.py",
-    "device/CIRCUITPY/base/xbrut_storage.py",
     "xbrut/platform_contract.py",
     "xbrut/simulator/server.py",
     "typecheck/platforms.py"

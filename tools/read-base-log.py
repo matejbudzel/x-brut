@@ -19,10 +19,9 @@ def prompt(device, timeout=12):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", required=True)
-    parser.add_argument("--path", default="/sd/base.log")
+    parser.add_argument("--path", default="/base.log")
     args = parser.parse_args()
-    parent, name = args.path.rsplit("/", 1)
-    command = "import os;print(open(%r).read() if %r in os.listdir(%r) else 'no log file')" % (args.path, name, parent or "/")
+    command = "import os;print(open(%r).read() if %r in os.listdir('/') else 'no log file')" % (args.path, args.path[1:])
     with serial.Serial(args.port, 115200, timeout=0.1) as device:
         device.reset_input_buffer()
         device.write(b"\x03\x03\r\n")

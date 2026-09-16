@@ -1,13 +1,12 @@
 """AP settings API; requires adafruit_httpserver on the device."""
 from xbrut_storage import read_json, write_json
 from xbrut_log import LOG_LEVELS, configure, debug, info
-from xbrut_paths import BASE_CONFIG_PATH
 from ap_page import HTML
 
 def start(platform):
     """Start the AP and return a server which the main loop polls."""
     info("ap", "starting AP settings service")
-    conf = read_json(BASE_CONFIG_PATH, {}) or {}
+    conf = read_json("/base-conf.json", {}) or {}
     platform.start_ap(conf)
     from adafruit_httpserver import Server, Request, Response, JSONResponse, POST
     server = Server(platform.socket_pool(), "/static", debug=False)
@@ -20,7 +19,7 @@ def start(platform):
     @server.route("/api/settings")
     def get_settings(request):
         debug("ap", "GET /api/settings")
-        value = read_json(BASE_CONFIG_PATH, {}) or {}
+        value = read_json("/base-conf.json", {}) or {}
         value.setdefault("log_level", "debug")
         import project
         value["document_urls"] = project.config().get("document_urls", [])
@@ -35,11 +34,11 @@ def start(platform):
             allowed = ("wifi_ssid", "wifi_password", "manifest_url", "splash_url", "ap_ssid", "ap_password", "log_level")
             if "log_level" in value and value["log_level"] not in LOG_LEVELS:
                 raise ValueError("invalid log level")
-            current = read_json(BASE_CONFIG_PATH, {}) or {}
+            current = read_json("/base-conf.json", {}) or {}
             current.pop("ap_base_ip", None)  # discard obsolete configurations on their next save
             for key in allowed:
                 if key in value: current[key] = value[key]
-            write_json(BASE_CONFIG_PATH, current)
+            write_json("/base-conf.json", current)
             configure(current)
             info("ap", "settings saved; log_level=%s" % current.get("log_level", "debug"))
             if "document_urls" in value:

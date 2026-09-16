@@ -1,11 +1,10 @@
 """Small, failure-safe logger for CircuitPython and the desktop simulator."""
 import json, os, time
-from xbrut_paths import BASE_CONFIG_PATH, LOG_PATH
 
 LOG_LEVELS = ("debug", "info", "error", "off")
 _VALUES = {"off": 0, "error": 1, "info": 2, "debug": 3}
 _level = 3
-_path = LOG_PATH
+_path = "/base.log"
 _max_bytes = 128 * 1024
 
 
@@ -78,8 +77,8 @@ def exception(component, message, problem):
         pass
 
 
-# Honor an existing SD-card setting before imports elsewhere emit their first log.
+# Honor an existing device setting before imports elsewhere emit their first log.
 try:
-    with open(BASE_CONFIG_PATH, "r") as _conf_file: configure(json.load(_conf_file))
+    with open("/base-conf.json", "r") as _conf_file: configure(json.load(_conf_file))
 except Exception:
     configure({})
