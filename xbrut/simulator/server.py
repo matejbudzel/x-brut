@@ -69,9 +69,23 @@ def ap_handler():
     return APHandler
 
 
+class Bitmap:
+    """Small displayio.Bitmap-compatible 1-bit surface for the simulator."""
+    def __init__(self): self.data = bytearray(48000)
+    def fill(self, value): self.data[:] = b"\xff" * 48000 if value else b"\0" * 48000
+    def __setitem__(self, point, value):
+        x, y = point
+        offset, mask = y * 60 + x // 8, 128 >> (x & 7)
+        if value: self.data[offset] |= mask
+        else: self.data[offset] &= ~mask
+
+
 class Platform:
-    def __init__(self): self.frame = bytes(48000); self.wifi = False
-    def present(self, frame): self.frame = bytes(frame)
+    def __init__(self): self.bitmap = Bitmap(); self.frame = bytes(48000); self.wifi = False
+    def present(self, frame):
+        self.frame = bytes(frame)
+        self.bitmap.data[:] = self.frame
+    def refresh(self): self.frame = bytes(self.bitmap.data)
     def sleep(self): pass
     def connect(self, ssid, password):
         if password == "bad": raise RuntimeError("bad password")
