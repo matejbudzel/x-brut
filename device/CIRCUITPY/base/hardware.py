@@ -59,12 +59,15 @@ class X4Platform:
                 # the home screen has an intuitive second way into Settings.
                 return {"back": "left", "left": "left", "right": "button_4", "power_button": "power"}.get(name, name)
     def sleep(self):
-        import alarm
+        import alarm, time
         # InputManager owns BUTTON, so release it before handing that pin to
-        # the wake alarm. Edge triggering avoids immediately waking on the
-        # power-key press that put the device to sleep.
+        # the wake alarm. ESP32-C3 only supports level wake alarms, so wait
+        # for the power-key press that initiated sleep to be released first.
+        while self.buttons.power_button_pressed:
+            time.sleep(0.02)
+            self.buttons.update()
         self.buttons.deinit()
-        wake = alarm.pin.PinAlarm(pin=board.BUTTON, value=False, edge=True, pull=True)
+        wake = alarm.pin.PinAlarm(pin=board.BUTTON, value=False, pull=True)
         alarm.light_sleep_until_alarms(wake)
         from adafruit_xteink_x4 import InputManager
         self.buttons = InputManager()
