@@ -1,0 +1,3 @@
+pyright==1.1.414
+circuitpython-stubs==10.3.0
+adafruit-circuitpython-typing==1.12.3

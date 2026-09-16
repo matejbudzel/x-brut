@@ -3,6 +3,7 @@ import board, displayio
 
 class X4Platform:
     def __init__(self):
+        # type: () -> None
         self.display = board.DISPLAY
         self.display.rotation = 270
         self._frame_path = "/.xbrut-frame.bmp"
@@ -22,20 +23,27 @@ class X4Platform:
         self.display.root_group = self._group
         from adafruit_xteink_x4 import InputManager
         self.buttons = InputManager()
-    def _row_offset(self, y): return 62 + (799 - y) * 60
+    def _row_offset(self, y):
+        # type: (int) -> int
+        return 62 + (799 - y) * 60
     def _write_row(self, y, row):
+        # type: (int, bytes) -> None
         self._frame.seek(self._row_offset(y)); self._frame.write(row)
     def clear(self):
+        # type: () -> None
         for y in range(800): self._write_row(y, b"\0" * 60)
     def pixel(self, x, y, on=True):
+        # type: (int, int, bool) -> None
         offset, mask = self._row_offset(y) + x // 8, 128 >> (x & 7)
         self._frame.seek(offset); value = self._frame.read(1)[0]
         self._frame.seek(offset); self._frame.write(bytes((value | mask if on else value & ~mask,)))
     def present(self, packed):
+        # type: (bytes) -> None
         for y in range(800):
             self._write_row(y, packed[y * 60:(y + 1) * 60])
         self.refresh()
     def present_file(self, path):
+        # type: (str) -> None
         """Refresh from a packed 1-bit file without allocating a second frame."""
         with open(path, "rb") as handle:
             for y in range(800):
@@ -44,6 +52,7 @@ class X4Platform:
                 self._write_row(y, row)
         self.refresh()
     def refresh(self):
+        # type: () -> None
         self._frame.flush()
         self.display.refresh()
     def button(self):
@@ -59,6 +68,7 @@ class X4Platform:
                 # the home screen has an intuitive second way into Settings.
                 return {"back": "left", "left": "left", "right": "button_4", "power_button": "power"}.get(name, name)
     def sleep(self):
+        # type: () -> None
         import alarm, time
         # InputManager owns BUTTON, so release it before handing that pin to
         # the wake alarm. ESP32-C3 only supports level wake alarms, so wait
@@ -72,9 +82,11 @@ class X4Platform:
         from adafruit_xteink_x4 import InputManager
         self.buttons = InputManager()
     def connect(self, ssid, password):
+        # type: (str, str) -> None
         import wifi
         wifi.radio.connect(ssid, password)
     def json(self, url):
+        # type: (str) -> dict[str, object]
         import json
         return json.loads(self.bytes(url).decode("utf-8"))
     def bytes(self, url, progress=None):
@@ -89,6 +101,7 @@ class X4Platform:
             return bytes(data)
         finally: response.close()
     def start_ap(self, conf):
+        # type: (dict[str, str]) -> None
         import random, wifi
         if not conf.get("ap_password"):
             alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; conf["ap_password"] = "".join(random.choice(alphabet) for _ in range(12))
@@ -101,6 +114,7 @@ class X4Platform:
         import wifi
         return wifi.radio.ipv4_address_ap
     def disconnect(self):
+        # type: () -> None
         import wifi
         try: wifi.radio.stop_station()
         except Exception: pass

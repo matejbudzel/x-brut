@@ -92,14 +92,15 @@ class Platform:
     def __init__(self): self.bitmap = Bitmap(); self.frame = bytes(48000); self.wifi = False
     def clear(self): self.bitmap.fill(0)
     def pixel(self, x, y, on=True): self.bitmap[x, y] = 1 if on else 0
-    def present(self, frame):
-        self.frame = bytes(frame)
+    def present(self, packed):
+        self.frame = bytes(packed)
         self.bitmap.data[:] = self.frame
     def refresh(self): self.frame = bytes(self.bitmap.data)
     def sleep(self): pass
     def connect(self, ssid, password):
         if password == "bad": raise RuntimeError("bad password")
         self.wifi = True
+    def disconnect(self): self.wifi = False
     def json(self, url): return json.loads(self.bytes(url).decode("utf-8"))
     def bytes(self, url, progress=None):
         with urlopen(url, timeout=20) as response:

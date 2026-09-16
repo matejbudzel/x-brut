@@ -26,6 +26,26 @@ Opening **AP MODE** in the simulator also starts the device-settings SPA on
 the ignored `.simulator/` directory, so the next simulator run uses them just
 as the device uses its root-level configuration.
 
+## Validate before deployment
+
+Run the x64 validation suite after changing Python code, especially the device
+adapter:
+
+```sh
+tools/validate.sh
+```
+
+On its first run this creates an ignored `.tools/x64-validation` environment.
+The command syntax-checks the Python sources, runs Pyright against the X4 board
+and CircuitPython APIs, verifies that the real and simulator adapters satisfy
+their shared platform contract, and imports/exercises the real
+`device/CIRCUITPY/base/hardware.py` with strict desktop hardware fakes.
+
+The desktop checks cannot validate electrical behavior, actual e-paper refresh
+timing, radio behavior, wake reliability, memory pressure, or compatibility
+with the exact libraries installed on a device. Run the X4 smoke test below as
+the final layer before deployment.
+
 ## Install on an X4
 
 1. Install the current [Xteink X4 CircuitPython build](https://circuitpython.org/board/xteink_x4/).
@@ -64,7 +84,8 @@ To read the device log without a mounted CIRCUITPY drive:
 ```
 
 For a non-destructive hardware smoke test of the installed CircuitPython build,
-display object, X4 input helper, and free heap:
+display object, X4 input helper/button names, wake-alarm construction, and free
+heap:
 
 ```sh
 .tools/x4-install/bin/python tools/smoke-x4.py --port /dev/ttyACM0

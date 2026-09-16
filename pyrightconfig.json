@@ -1,0 +1,18 @@
+{
+  "include": [
+    "device/CIRCUITPY/base/hardware.py",
+    "xbrut/platform_contract.py",
+    "xbrut/simulator/server.py",
+    "typecheck/platforms.py"
+  ],
+  "extraPaths": [
+    "device/CIRCUITPY",
+    "device/CIRCUITPY/base",
+    ".tools/x64-validation/circuitpython-typings"
+  ],
+  "stubPath": "typings",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "error",
+  "reportMissingModuleSource": "none"
+}
