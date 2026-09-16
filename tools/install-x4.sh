@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLS="$ROOT/.tools/x4-install"
 BACKUPS="$ROOT/backups"
 FIRMWARE_URL="https://downloads.circuitpython.org/bin/xteink_x4/en_US/adafruit-circuitpython-xteink_x4-en_US-10.3.0.bin"
+BOARD_ID="xteink_x4"
 PORT=""
 YES=0
 
@@ -89,7 +90,9 @@ sleep 4
 cp -a "$ROOT/device/CIRCUITPY/." "$STAGE/"
 mkdir -p "$STAGE/lib"
 echo "Resolving CircuitPython libraries with circup..."
-"$TOOLS/bin/circup" --path "$STAGE" --cpy-version 10.3.0 install --requirement "$ROOT/device/requirements.txt"
+# The staging directory is not a mounted CIRCUITPY drive, so it has no
+# boot_out.txt.  CircUp requires both overrides to skip that probe.
+"$TOOLS/bin/circup" --path "$STAGE" --cpy-version 10.3.0 --board-id "$BOARD_ID" install --requirement "$ROOT/device/requirements.txt"
 
 echo "Uploading X Brut and libraries over the CircuitPython serial REPL..."
 "$TOOLS/bin/python" "$ROOT/tools/serial-upload.py" --port "$PORT" --source "$STAGE"
