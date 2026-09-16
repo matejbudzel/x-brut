@@ -8,6 +8,29 @@ import time
 import serial
 
 
+WIPE_SCRIPT = b"""def remove_tree(path):
+    for name in os.listdir(path):
+        child = path + "/" + name
+        try:
+            os.remove(child)
+        except OSError:
+            remove_tree(child)
+            os.rmdir(child)
+
+for directory in ("/base", "/lib"):
+    try:
+        remove_tree(directory)
+        os.rmdir(directory)
+    except OSError:
+        pass
+for filename in ("/code.py", "/project.py", "/project.py.bak"):
+    try:
+        os.remove(filename)
+    except OSError:
+        pass
+"""
+
+
 def prompt(device, timeout=12):
     deadline, output = time.monotonic() + timeout, b""
     while time.monotonic() < deadline:
@@ -24,6 +47,30 @@ def command(device, value):
     response = prompt(device)
     if b"Traceback" in response:
         raise RuntimeError(response.decode("utf-8", "replace"))
+    return response
+
+
+def start_repl(device):
+    device.reset_input_buffer()
+    device.write(b"\x03\x03\r\n")
+    device.flush()
+    prompt(device)
+
+
+def write_bytes(device, target, contents):
+    command(device, "f=open(%r,'wb')" % target)
+    for offset in range(0, len(contents), 360):
+        command(device, "f.write(binascii.a2b_base64(%r))" % base64.b64encode(contents[offset:offset + 360]))
+    command(device, "f.close()")
+
+
+def wipe_application(device):
+    """Remove X Brut code and libraries while retaining device configuration."""
+    command(device, "import os,binascii")
+    temporary = "/.__xbrut_wipe.py"
+    write_bytes(device, temporary, WIPE_SCRIPT)
+    command(device, "exec(open(%r).read())" % temporary)
+    command(device, "os.remove(%r)" % temporary)
 
 
 def upload(device, source, relative):
@@ -36,19 +83,29 @@ def upload(device, source, relative):
         directory = parent.rstrip("/") + "/" + part
         command(device, "os.mkdir(%r) if %r not in os.listdir(%r) else None" % (directory, part, parent))
         parent = directory
-    command(device, "f=open(%r,'wb')" % target)
     with open(os.path.join(source, relative), "rb") as handle:
-        while True:
-            chunk = handle.read(360)
-            if not chunk: break
-            command(device, "f.write(binascii.a2b_base64(%r))" % base64.b64encode(chunk))
-    command(device, "f.close()")
+        write_bytes(device, target, handle.read())
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", required=True); parser.add_argument("--source", required=True)
+    parser.add_argument("--port", required=True)
+    parser.add_argument("--source")
+    parser.add_argument("--check-circuitpython", action="store_true")
+    parser.add_argument("--wipe", action="store_true", help="remove managed app files before upload")
     args = parser.parse_args()
+    if not args.check_circuitpython and not args.source:
+        parser.error("--source is required unless --check-circuitpython is used")
+    with serial.Serial(args.port, 115200, timeout=0.1) as device:
+        start_repl(device)
+        if args.check_circuitpython:
+            response = command(device, "import sys;print(sys.implementation.name)")
+            if b"circuitpython" not in response.lower():
+                raise RuntimeError("connected REPL is not CircuitPython")
+            print("CircuitPython REPL detected.")
+            return
+        if args.wipe:
+            wipe_application(device)
     files = []
     for root, _, names in os.walk(args.source):
         for name in names:
@@ -58,7 +115,7 @@ def main():
     # code.py runs immediately when closed, so it must be uploaded last.
     if os.path.exists(os.path.join(args.source, "code.py")): files.append("code.py")
     with serial.Serial(args.port, 115200, timeout=0.1) as device:
-        device.write(b"\x03\x03\r\n"); prompt(device)
+        start_repl(device)
         for path in files:
             print("upload", path)
             upload(device, args.source, path)

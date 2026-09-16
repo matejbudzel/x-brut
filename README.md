@@ -47,10 +47,12 @@ tools/install-x4.sh --yes
 The script auto-detects its USB JTAG serial port (or accept `--port
 /dev/ttyACM0`), installs missing host prerequisites with `apt`, creates an
 isolated `.tools/` environment for `esptool`, `pyserial`, and `circup`,
-downloads the official X4 CircuitPython binary, and saves a complete 16 MiB
-backup under `backups/` **before** erasing Crosspoint. It then uploads the base
-and resolved library dependencies through the CircuitPython serial REPL; this
-board does not provide a CIRCUITPY USB drive.
+checks for CircuitPython on the X4 first. When found, it replaces only the
+managed X Brut application files and libraries over the serial REPL, retaining
+CircuitPython and device configuration. Otherwise it downloads the official X4
+CircuitPython binary and saves a complete 16 MiB backup under `backups/`
+**before** erasing Crosspoint. Pass `--force-flash` to explicitly take that
+backup-and-reflash path. This board does not provide a CIRCUITPY USB drive.
 
 `base-conf.json` and `base.log` live at the CIRCUITPY root. They are mutable
 configuration and diagnostics, not reader content storage.

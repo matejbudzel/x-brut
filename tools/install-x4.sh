@@ -9,14 +9,16 @@ FIRMWARE_URL="https://downloads.circuitpython.org/bin/xteink_x4/en_US/adafruit-c
 BOARD_ID="xteink_x4"
 PORT=""
 YES=0
+FORCE_FLASH=0
 
 usage() {
   cat <<'EOF'
-Usage: tools/install-x4.sh --yes [--port /dev/ttyACM0] [--firmware-url URL]
+Usage: tools/install-x4.sh --yes [--port /dev/ttyACM0] [--firmware-url URL] [--force-flash]
 
-This backs up the whole 16 MiB X4 flash, erases it, flashes official
-CircuitPython, installs X Brut and its CircuitPython libraries over serial.
---yes is required because Crosspoint will be erased.
+When CircuitPython is already running, this replaces only the X Brut app and
+its libraries over serial. Otherwise it backs up the whole 16 MiB X4 flash,
+erases it, and flashes official CircuitPython. --force-flash always takes the
+full backup-and-flash path. --yes is required because app files may be erased.
 EOF
 }
 
@@ -25,6 +27,7 @@ while (($#)); do
     --yes) YES=1 ;;
     --port) PORT="${2:?missing port}"; shift ;;
     --firmware-url) FIRMWARE_URL="${2:?missing URL}"; shift ;;
+    --force-flash) FORCE_FLASH=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -32,7 +35,7 @@ while (($#)); do
 done
 
 if (( ! YES )); then
-  echo "Refusing to erase the X4 without --yes." >&2
+  echo "Refusing to replace X Brut without --yes." >&2
   usage >&2
   exit 2
 fi
@@ -66,25 +69,29 @@ if [[ -z "$PORT" || ! -e "$PORT" ]]; then
   exit 1
 fi
 
-mkdir -p "$BACKUPS"
-STAMP="$(date +%Y%m%d-%H%M%S)"
-BACKUP="$BACKUPS/x4-crosspoint-$STAMP.bin"
-FIRMWARE="$TOOLS/xteink-x4-circuitpython.bin"
 STAGE="$(mktemp -d)"
 cleanup() { rm -rf "$STAGE"; }
 trap cleanup EXIT
 
-echo "Downloading official CircuitPython firmware..."
-curl --fail --location --retry 3 "$FIRMWARE_URL" -o "$FIRMWARE"
-
-echo "Backing up current 16 MiB flash to $BACKUP"
-"$TOOLS/bin/python" -m esptool --chip esp32c3 --port "$PORT" read-flash 0x0 0x1000000 "$BACKUP"
-[[ $(wc -c < "$BACKUP") -eq 16777216 ]] || { echo "Flash backup has an unexpected size; refusing to continue." >&2; exit 1; }
-
-echo "Erasing and flashing CircuitPython..."
-"$TOOLS/bin/python" -m esptool --chip esp32c3 --port "$PORT" erase-flash
-"$TOOLS/bin/python" -m esptool --chip esp32c3 --port "$PORT" write-flash 0x0 "$FIRMWARE"
-sleep 4
+FLASHED=0
+if (( ! FORCE_FLASH )) && "$TOOLS/bin/python" "$ROOT/tools/serial-upload.py" --port "$PORT" --check-circuitpython >/dev/null 2>&1; then
+  echo "CircuitPython detected; replacing only X Brut files and libraries."
+else
+  mkdir -p "$BACKUPS"
+  STAMP="$(date +%Y%m%d-%H%M%S)"
+  BACKUP="$BACKUPS/x4-crosspoint-$STAMP.bin"
+  FIRMWARE="$TOOLS/xteink-x4-circuitpython.bin"
+  echo "Downloading official CircuitPython firmware..."
+  curl --fail --location --retry 3 "$FIRMWARE_URL" -o "$FIRMWARE"
+  echo "Backing up current 16 MiB flash to $BACKUP"
+  "$TOOLS/bin/python" -m esptool --chip esp32c3 --port "$PORT" read-flash 0x0 0x1000000 "$BACKUP"
+  [[ $(wc -c < "$BACKUP") -eq 16777216 ]] || { echo "Flash backup has an unexpected size; refusing to continue." >&2; exit 1; }
+  echo "Erasing and flashing CircuitPython..."
+  "$TOOLS/bin/python" -m esptool --chip esp32c3 --port "$PORT" erase-flash
+  "$TOOLS/bin/python" -m esptool --chip esp32c3 --port "$PORT" write-flash 0x0 "$FIRMWARE"
+  sleep 4
+  FLASHED=1
+fi
 
 # circup resolves transitive bundle dependencies into a host staging directory.
 cp -a "$ROOT/device/CIRCUITPY/." "$STAGE/"
@@ -95,5 +102,9 @@ echo "Resolving CircuitPython libraries with circup..."
 "$TOOLS/bin/circup" --path "$STAGE" --cpy-version 10.3.0 --board-id "$BOARD_ID" install --requirement "$ROOT/device/requirements.txt"
 
 echo "Uploading X Brut and libraries over the CircuitPython serial REPL..."
-"$TOOLS/bin/python" "$ROOT/tools/serial-upload.py" --port "$PORT" --source "$STAGE"
-echo "Installed X Brut. Flash backup: $BACKUP"
+"$TOOLS/bin/python" "$ROOT/tools/serial-upload.py" --port "$PORT" --source "$STAGE" --wipe
+if (( FLASHED )); then
+  echo "Installed X Brut. Flash backup: $BACKUP"
+else
+  echo "Installed X Brut without reflashing CircuitPython."
+fi
