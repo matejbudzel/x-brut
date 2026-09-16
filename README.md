@@ -70,6 +70,11 @@ CIRCUITPY root. `sha256` is optional but strongly recommended.
 }
 ```
 
+For a simple home-network deployment, serve this repository directly and set
+the device Manifest URL to `http://<host>/ota-manifest.json`. The tracked
+manifest uses paths relative to itself, so it downloads the base files from
+this repository without editing URLs.
+
 Updates are staged as `.new`, verified, then rotated to `.bak` and installed.
 `code.py` is deliberately not updatable: it is the stable recovery entrypoint.
 `project.py` has its own `project.py.bak` fallback.

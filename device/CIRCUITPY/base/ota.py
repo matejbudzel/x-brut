@@ -6,7 +6,15 @@ class OTA:
     def __init__(self, network, root=""):
         self.network, self.root = network, root.rstrip("/")
     def _path(self, path): return self.root + path
-    def manifest(self, url): return self.network.json(url)
+    def manifest(self, url):
+        """Load a manifest and expand its repository-relative file URLs."""
+        manifest = self.network.json(url)
+        base = url.rsplit("/", 1)[0] + "/"
+        for item in manifest.get("files", []):
+            source = item.get("url", "")
+            if source and "://" not in source:
+                item["url"] = base + source.lstrip("./")
+        return manifest
     def download_splash(self, url):
         """Validate, proportionally fit and rotate an uncompressed 1-bit BMP."""
         data = self.network.bytes(url)
