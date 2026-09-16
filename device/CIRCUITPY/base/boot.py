@@ -23,10 +23,9 @@ def run():
     ui = BaseUI(platform)
     splash_loaded = False
     try:
-        with open("/splash.bin", "rb") as handle:
-            splash = handle.read()
-        if len(splash) == 48000: platform.present(splash); splash_loaded = True
-    except OSError: pass
+        platform.present_file("/splash.bin")
+        splash_loaded = True
+    except (OSError, ValueError): pass
     if not splash_loaded: ui.splash(getattr(project, "PROJECT_NAME", ""))
     time.sleep(1)
     ui.home(project)
@@ -123,7 +122,7 @@ def _splash_screen(ui, platform):
                     append_log("splash: %r" % error); ui.show("splash_update", "SPLASH SCREEN", ["- FETCH FAILED -"], [("DOWNLOAD", "download")], start, ("", ""))
             elif not ready and button in ("confirm", "button_2"):
                 try:
-                    with open("/splash.bin", "rb") as handle: platform.present(handle.read())
+                    platform.present_file("/splash.bin")
                 except OSError: ui.splash("")
                 while not platform.button(): time.sleep(0.05)
                 ui.show("splash_update", "SPLASH SCREEN", ["SPLASH SCREEN REPLACED"], bottom_labels=("Back", "Preview", "", "Revert"), side_labels=("", ""))

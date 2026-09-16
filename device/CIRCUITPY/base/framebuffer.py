@@ -17,12 +17,12 @@ except OSError:  # Desktop simulator imports the same module directly.
 
 
 class Framebuffer:
-    def __init__(self): self.data = bytearray(ROW_BYTES * HEIGHT)
-    def clear(self): self.data[:] = b"\0" * len(self.data)
+    """Drawing API backed directly by the one displayio bitmap on the X4."""
+    def __init__(self, bitmap): self.bitmap = bitmap
+    def clear(self): self.bitmap.fill(0)
     def pixel(self, x, y, on=True):
         if 0 <= x < WIDTH and 0 <= y < HEIGHT:
-            i, mask = y * ROW_BYTES + x // 8, 128 >> (x & 7)
-            self.data[i] = (self.data[i] | mask) if on else (self.data[i] & ~mask)
+            self.bitmap[x, y] = 1 if on else 0
     def rect(self, x, y, width, height, on=True):
         for yy in range(y, y + height):
             for xx in range(x, x + width): self.pixel(xx, yy, on)

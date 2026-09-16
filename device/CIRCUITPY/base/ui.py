@@ -7,7 +7,7 @@ CONTENT_X = 18
 class BaseUI:
     """Reusable base screen template and deterministic button navigation."""
     def __init__(self, platform):
-        self.platform, self.frame, self.page, self.focus = platform, Framebuffer(), "home", 0
+        self.platform, self.frame, self.page, self.focus = platform, Framebuffer(platform.bitmap), "home", 0
         self.lines, self.actions = [], []
         self.title = "xBrut"
         self.bottom_labels, self.side_labels = ("", "", "", ""), ("", "")
@@ -29,7 +29,7 @@ class BaseUI:
             y = 82 + (len(self.lines) + index + 1) * 28
             if index == self.focus: self.frame.outline(CONTENT_X, y - 5, 480 - CONTENT_X, 26); self.frame.text(CONTENT_X + 4, y, action[0], 1)
             else: self.frame.text(CONTENT_X + 4, y, action[0], 1)
-        self._labels(); self.platform.present(self.frame.data)
+        self._labels(); self.platform.refresh()
 
     def splash(self, project_name=""):
         """Fallback splash when no downloaded raw splash is installed."""
@@ -48,7 +48,7 @@ class BaseUI:
             title_x = (480 - len("xBrut") * 8 * title_scale) // 2
             self.frame.text(title_x, 350, "xBrut", title_scale)
         self.frame.text(16, 770, "sleeping...")
-        self.platform.present(self.frame.data)
+        self.platform.refresh()
 
     def home(self, project=None):
         project_label = getattr(project, "HOME_ACTION_LABEL", "") if project else ""
