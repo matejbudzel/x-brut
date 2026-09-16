@@ -63,6 +63,13 @@ To read the device log without a mounted CIRCUITPY drive:
 .tools/x4-install/bin/python tools/read-base-log.py --port /dev/ttyACM0
 ```
 
+For a non-destructive hardware smoke test of the installed CircuitPython build,
+display object, X4 input helper, and free heap:
+
+```sh
+.tools/x4-install/bin/python tools/smoke-x4.py --port /dev/ttyACM0
+```
+
 ## OTA manifest
 
 The manifest is JSON. Every item is downloaded to a path relative to the

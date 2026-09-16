@@ -60,9 +60,14 @@ class X4Platform:
                 return {"back": "left", "left": "left", "right": "button_4", "power_button": "power"}.get(name, name)
     def sleep(self):
         import alarm
-        try: self.display.sleep()
-        except AttributeError: pass  # EPaperDisplay has no sleep() API.
-        alarm.light_sleep_until_alarms()
+        # InputManager owns BUTTON, so release it before handing that pin to
+        # the wake alarm. Edge triggering avoids immediately waking on the
+        # power-key press that put the device to sleep.
+        self.buttons.deinit()
+        wake = alarm.pin.PinAlarm(pin=board.BUTTON, value=False, edge=True, pull=True)
+        alarm.light_sleep_until_alarms(wake)
+        from adafruit_xteink_x4 import InputManager
+        self.buttons = InputManager()
     def connect(self, ssid, password):
         import wifi
         wifi.radio.connect(ssid, password)
