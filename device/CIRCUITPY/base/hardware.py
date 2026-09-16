@@ -19,7 +19,6 @@ class X4Platform:
         self._bitmap = displayio.OnDiskBitmap(self._frame_path)
         self._group = displayio.Group()
         self._group.append(displayio.TileGrid(self._bitmap, pixel_shader=self._bitmap.pixel_shader))
-        self.display.auto_refresh = False
         self.display.root_group = self._group
         from adafruit_xteink_x4 import InputManager
         self.buttons = InputManager()
