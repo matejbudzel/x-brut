@@ -57,6 +57,12 @@ def start_repl(device):
     prompt(device)
 
 
+def soft_reload(device):
+    """Restart CircuitPython so the newly uploaded code is loaded."""
+    device.write(b"\x04")  # Ctrl-D: CircuitPython soft reload.
+    device.flush()
+
+
 def write_bytes(device, target, contents):
     command(device, "f=open(%r,'wb')" % target)
     for offset in range(0, len(contents), 360):
@@ -93,6 +99,7 @@ def main():
     parser.add_argument("--source")
     parser.add_argument("--check-circuitpython", action="store_true")
     parser.add_argument("--wipe", action="store_true", help="remove managed app files before upload")
+    parser.add_argument("--reload", action="store_true", help="soft-reload CircuitPython after upload")
     args = parser.parse_args()
     if not args.check_circuitpython and not args.source:
         parser.error("--source is required unless --check-circuitpython is used")
@@ -119,6 +126,9 @@ def main():
         for path in files:
             print("upload", path)
             upload(device, args.source, path)
+        if args.reload:
+            print("soft reload")
+            soft_reload(device)
 
 
 if __name__ == "__main__": main()

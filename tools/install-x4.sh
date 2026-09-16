@@ -102,7 +102,7 @@ echo "Resolving CircuitPython libraries with circup..."
 "$TOOLS/bin/circup" --path "$STAGE" --cpy-version 10.3.0 --board-id "$BOARD_ID" install --requirement "$ROOT/device/requirements.txt"
 
 echo "Uploading X Brut and libraries over the CircuitPython serial REPL..."
-"$TOOLS/bin/python" "$ROOT/tools/serial-upload.py" --port "$PORT" --source "$STAGE" --wipe
+"$TOOLS/bin/python" "$ROOT/tools/serial-upload.py" --port "$PORT" --source "$STAGE" --wipe --reload
 if (( FLASHED )); then
   echo "Installed X Brut. Flash backup: $BACKUP"
 else
