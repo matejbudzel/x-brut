@@ -57,6 +57,12 @@ backup-and-reflash path. This board does not provide a CIRCUITPY USB drive.
 `base-conf.json` and `base.log` live at the CIRCUITPY root. They are mutable
 configuration and diagnostics, not reader content storage.
 
+To read the device log without a mounted CIRCUITPY drive:
+
+```sh
+.tools/x4-install/bin/python tools/read-base-log.py --port /dev/ttyACM0
+```
+
 ## OTA manifest
 
 The manifest is JSON. Every item is downloaded to a path relative to the

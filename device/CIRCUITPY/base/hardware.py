@@ -15,6 +15,12 @@ class X4Platform:
             b"\xff\xff\xff\0\0\0\0\0"
         )
         self.clear()
+        self._frame.flush()
+        self._bitmap = displayio.OnDiskBitmap(self._frame_path)
+        self._group = displayio.Group()
+        self._group.append(displayio.TileGrid(self._bitmap, pixel_shader=self._bitmap.pixel_shader))
+        self.display.auto_refresh = False
+        self.display.root_group = self._group
         from adafruit_xteink_x4 import InputManager
         self.buttons = InputManager()
     def _row_offset(self, y): return 62 + (799 - y) * 60
@@ -40,10 +46,6 @@ class X4Platform:
         self.refresh()
     def refresh(self):
         self._frame.flush()
-        bitmap = displayio.OnDiskBitmap(self._frame_path)
-        group = displayio.Group()
-        group.append(displayio.TileGrid(bitmap, pixel_shader=bitmap.pixel_shader))
-        self.display.root_group = group
         self.display.refresh()
     def button(self):
         self.buttons.update()
@@ -54,9 +56,14 @@ class X4Platform:
                 name = self.buttons.button_name(index).lower().replace(" ", "_")
                 # The physical Back key is the leftmost under-display key.
                 # The two side keys are additional menu navigation controls.
-                return {"back": "left", "left": "button_3", "right": "button_4", "power_button": "power"}.get(name, name)
+                # Back is the labeled Settings key; accept Left there too so
+                # the home screen has an intuitive second way into Settings.
+                return {"back": "left", "left": "left", "right": "button_4", "power_button": "power"}.get(name, name)
     def sleep(self):
-        import alarm; self.display.sleep(); alarm.light_sleep_until_alarms()
+        import alarm
+        try: self.display.sleep()
+        except AttributeError: pass  # EPaperDisplay has no sleep() API.
+        alarm.light_sleep_until_alarms()
     def connect(self, ssid, password):
         import wifi
         wifi.radio.connect(ssid, password)
