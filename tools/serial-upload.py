@@ -28,7 +28,9 @@ def command(device, value):
 
 def upload(device, source, relative):
     target = "/" + relative.replace(os.sep, "/")
-    command(device, "import os,ubinascii")
+    # CircuitPython exposes the standard-library-compatible ``binascii``
+    # module; ``ubinascii`` is MicroPython-only.
+    command(device, "import os,binascii")
     parent = "/"
     for part in relative.replace(os.sep, "/").split("/")[:-1]:
         directory = parent.rstrip("/") + "/" + part
@@ -39,7 +41,7 @@ def upload(device, source, relative):
         while True:
             chunk = handle.read(360)
             if not chunk: break
-            command(device, "f.write(ubinascii.a2b_base64(%r))" % base64.b64encode(chunk))
+            command(device, "f.write(binascii.a2b_base64(%r))" % base64.b64encode(chunk))
     command(device, "f.close()")
 
 
