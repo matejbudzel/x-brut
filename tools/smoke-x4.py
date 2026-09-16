@@ -35,7 +35,7 @@ def main():
         device.flush()
         prompt(device)
         # Keep this one line so it is valid at an ordinary CircuitPython REPL.
-        result = command(device, "import alarm,board,gc,sys;from adafruit_xteink_x4 import InputManager;b=InputManager();b.update();names=','.join(b.button_name(i) for i in range(7));power=b.power_button_pressed;b.deinit();wake=alarm.pin.PinAlarm(pin=board.BUTTON,value=False,pull=True);print('board=%s cpy=%s display=%s size=%dx%d rotation=%d buttons=%s power=%s heap=%d' % (board.board_id,sys.implementation.version,type(board.DISPLAY).__name__,board.DISPLAY.width,board.DISPLAY.height,board.DISPLAY.rotation,names,power,gc.mem_free()));del wake")
+        result = command(device, "import alarm,board,gc,os,storage,supervisor,sys;gc.collect();from adafruit_xteink_x4 import InputManager;b=InputManager();b.update();names=','.join(b.button_name(i) for i in range(7));power=b.power_button_pressed;b.deinit();wake=alarm.pin.PinAlarm(pin=board.BUTTON,value=False,pull=True);p='/sd/.xbrut-smoke';f=open(p,'w');f.write('ok');f.close();sd_ok=open(p).read()=='ok';os.remove(p);mount=storage.getmount('/sd');d=supervisor.runtime.display;print('board=%s cpy=%s display=%s size=%dx%d rotation=%d buttons=%s power=%s sd=%s writable=%s heap=%d' % (board.board_id,sys.implementation.version,type(d).__name__,d.width,d.height,d.rotation,names,power,type(mount).__name__,sd_ok,gc.mem_free()));del wake")
         print(result, end="")
         device.write(b"\x04")  # Restore the installed application after the check.
         device.flush()

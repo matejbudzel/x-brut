@@ -13,10 +13,27 @@ class Pin:
         self.name = name
 
 
+class SPI:
+    __slots__ = ()
+
+
+class FourWire:
+    __slots__ = ("spi_bus", "command", "chip_select", "reset", "baudrate", "polarity", "phase")
+
+    def __init__(self, spi_bus, *, command=None, chip_select=None, reset=None,
+                 baudrate=24000000, polarity=0, phase=0):
+        if not isinstance(spi_bus, SPI):
+            raise TypeError("FourWire requires the shared SPI bus")
+        if not all(value is None or isinstance(value, Pin) for value in (command, chip_select, reset)):
+            raise TypeError("display control lines must be pins")
+        self.spi_bus, self.command, self.chip_select, self.reset = spi_bus, command, chip_select, reset
+        self.baudrate, self.polarity, self.phase = baudrate, polarity, phase
+
+
 class Display:
     __slots__ = (
         "rotation", "root_group", "refresh_count", "width", "height",
-        "time_to_refresh", "busy",
+        "time_to_refresh", "busy", "configuration",
     )
 
     def __init__(self):
@@ -27,6 +44,7 @@ class Display:
         self.height = 480
         self.time_to_refresh = 0.0
         self.busy = False
+        self.configuration = None
 
     def refresh(self):
         self.refresh_count += 1
@@ -206,6 +224,7 @@ class HardwareEnvironment:
     def __init__(self):
         InputManager.instances = []
         self.display = Display()
+        self.spi = SPI()
         self.button_pin = Pin("BUTTON")
         self.radio = Radio()
         self.responses = []
@@ -234,11 +253,58 @@ class HardwareEnvironment:
         board = ModuleType("board")
         board.DISPLAY = self.display
         board.BUTTON = self.button_pin
+        board.EPD_DC = Pin("EPD_DC")
+        board.EPD_CS = Pin("EPD_CS")
+        board.EPD_RESET = Pin("EPD_RESET")
+        board.EPD_BUSY = Pin("EPD_BUSY")
 
         displayio = ModuleType("displayio")
         displayio.OnDiskBitmap = OnDiskBitmap
         displayio.Group = Group
         displayio.TileGrid = TileGrid
+
+        fourwire = ModuleType("fourwire")
+        fourwire.FourWire = FourWire
+
+        epaperdisplay = ModuleType("epaperdisplay")
+
+        def create_epaper(
+            display_bus, start_sequence, stop_sequence, *, width, height,
+            ram_width, ram_height, colstart=0, rowstart=0, rotation=0,
+            set_column_window_command=None, set_row_window_command=None,
+            set_current_column_command=None, set_current_row_command=None,
+            write_black_ram_command, black_bits_inverted=False,
+            write_color_ram_command=None, color_bits_inverted=False,
+            highlight_color=0, highlight_color2=0,
+            refresh_display_command, refresh_time=40, busy_pin=None,
+            busy_state=True, seconds_per_frame=180,
+            always_toggle_chip_select=False, grayscale=False,
+            advanced_color_epaper=False, spectra6=False,
+            two_byte_sequence_length=False, start_up_time=0,
+            address_little_endian=False,
+        ):
+            if not isinstance(display_bus, FourWire):
+                raise TypeError("EPaperDisplay requires FourWire")
+            if not isinstance(start_sequence, bytes) or not isinstance(stop_sequence, bytes):
+                raise TypeError("display sequences must be bytes")
+            if not isinstance(busy_pin, Pin):
+                raise TypeError("busy_pin must be a pin")
+            self.display.width, self.display.height = width, height
+            self.display.rotation = rotation
+            self.display.configuration = {
+                "bus": display_bus, "ram_width": ram_width, "ram_height": ram_height,
+                "write_black_ram_command": write_black_ram_command,
+                "black_bits_inverted": black_bits_inverted,
+                "refresh_display_command": refresh_display_command,
+                "refresh_time": refresh_time, "busy_pin": busy_pin,
+                "busy_state": busy_state, "seconds_per_frame": seconds_per_frame,
+                "grayscale": grayscale,
+                "two_byte_sequence_length": two_byte_sequence_length,
+                "address_little_endian": address_little_endian,
+            }
+            return self.display
+
+        epaperdisplay.EPaperDisplay = create_epaper
 
         x4 = ModuleType("adafruit_xteink_x4")
         x4.InputManager = InputManager
@@ -302,10 +368,17 @@ class HardwareEnvironment:
             self.storage_writes.append((path, dict(value)))
 
         storage.write_json = write_json
+        storage.shared_spi = lambda: self.spi
+
+        paths = ModuleType("xbrut_paths")
+        paths.BASE_CONFIG_PATH = "/sd/base-conf.json"
+        paths.FRAME_PATH = "/sd/.xbrut-frame.bmp"
 
         self.modules = {
             "board": board,
             "displayio": displayio,
+            "epaperdisplay": epaperdisplay,
+            "fourwire": fourwire,
             "adafruit_xteink_x4": x4,
             "wifi": wifi,
             "socketpool": socketpool,
@@ -314,6 +387,7 @@ class HardwareEnvironment:
             "alarm.pin": alarm_pin,
             "xbrut_storage": storage,
             "xbrut_log": xbrut_log,
+            "xbrut_paths": paths,
         }
 
     def queue_response(self, chunks, content_length=None, error=None):

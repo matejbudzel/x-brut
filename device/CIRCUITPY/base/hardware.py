@@ -1,16 +1,59 @@
-"""Only hardware-dependent adapter. X4 display is initialized by CircuitPython."""
-import board, displayio
+"""Only hardware-dependent adapter for the X4 display, input and networking."""
+import board, displayio, epaperdisplay, fourwire
 from xbrut_log import debug, error, info, safe_url
+from xbrut_paths import BASE_CONFIG_PATH, FRAME_PATH
+from xbrut_storage import shared_spi
+
+
+# Keep this SSD1677/GDEQ0426T82 setup aligned with CircuitPython's authoritative
+# ports/espressif/boards/xteink_x4/board.c definition.
+_DISPLAY_START = bytes((
+    0x12, 0x80, 0x00, 0x14,
+    0x18, 0x00, 0x01, 0x80,
+    0x0C, 0x00, 0x05, 0xAE, 0xC7, 0xC3, 0xC0, 0x40,
+    0x01, 0x00, 0x03, 0xDF, 0x01, 0x02,
+    0x11, 0x00, 0x01, 0x01,
+    0x3C, 0x00, 0x01, 0x01,
+    0x44, 0x00, 0x04, 0x00, 0x00, 0x1F, 0x03,
+    0x45, 0x00, 0x04, 0xDF, 0x01, 0x00, 0x00,
+    0x4E, 0x00, 0x02, 0x00, 0x00,
+    0x4F, 0x00, 0x02, 0xDF, 0x01,
+    0x46, 0x80, 0x01, 0xF7, 0xFF,
+    0x21, 0x00, 0x02, 0x40, 0x00,
+    0x22, 0x00, 0x01, 0xF7,
+))
+_DISPLAY_STOP = bytes((
+    0x22, 0x00, 0x01, 0x83,
+    0x20, 0x00, 0x00,
+    0x10, 0x00, 0x01, 0x01,
+))
+_DISPLAY_REFRESH = b"\x20\x00\x00"
+
+
+def _create_display():
+    bus = fourwire.FourWire(
+        shared_spi(), command=board.EPD_DC, chip_select=board.EPD_CS,
+        reset=board.EPD_RESET, baudrate=40000000,
+    )
+    return epaperdisplay.EPaperDisplay(
+        bus, _DISPLAY_START, _DISPLAY_STOP,
+        width=800, height=480, ram_width=800, ram_height=480, rotation=0,
+        write_black_ram_command=0x24, black_bits_inverted=False,
+        refresh_display_command=_DISPLAY_REFRESH, refresh_time=1.6,
+        busy_pin=board.EPD_BUSY, busy_state=True, seconds_per_frame=5.0,
+        grayscale=False, two_byte_sequence_length=True,
+        address_little_endian=True,
+    )
 
 class X4Platform:
     def __init__(self):
         # type: () -> None
         info("hardware", "X4Platform init begin")
-        self.display = board.DISPLAY
+        self.display = _create_display()
         debug("hardware", "display=%s size=%sx%s" % (type(self.display).__name__, self.display.width, self.display.height))
         self.display.rotation = 270
         debug("hardware", "display rotation=270")
-        self._frame_path = "/.xbrut-frame.bmp"
+        self._frame_path = FRAME_PATH
         debug("hardware", "opening framebuffer %s" % self._frame_path)
         self._frame = open(self._frame_path, "w+b")
         # 480x800, 1-bit BMP. Rows are 60 bytes and naturally 4-byte aligned.
@@ -163,7 +206,7 @@ class X4Platform:
         info("hardware", "start AP requested ssid=%s" % conf.get("ap_ssid", "x-brut"))
         if not conf.get("ap_password"):
             alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; conf["ap_password"] = "".join(random.choice(alphabet) for _ in range(12))
-            from xbrut_storage import write_json; write_json("/base-conf.json", conf)
+            from xbrut_storage import write_json; write_json(BASE_CONFIG_PATH, conf)
             debug("hardware", "generated and persisted AP password")
         try: wifi.radio.start_ap(conf.get("ap_ssid", "x-brut"), conf["ap_password"])
         except Exception as problem:
