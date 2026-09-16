@@ -122,6 +122,10 @@ class X4PlatformTest(unittest.TestCase):
         self.assertIs(wake.pull, True)
         self.assertIsNot(self.platform.buttons, original_buttons)
         self.assertEqual(len(InputManager.instances), 2)
+        messages = [message for _, component, message in self.environment.logs if component == "hardware"]
+        self.assertIn("entering light_sleep_until_alarms", messages)
+        self.assertTrue(any(message.startswith("light sleep returned wake=") for message in messages))
+        self.assertIn("InputManager reinitialized", messages)
 
     def test_wifi_ap_pool_address_and_disconnect(self):
         self.platform.connect("network", "password")

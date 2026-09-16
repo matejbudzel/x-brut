@@ -14,12 +14,19 @@ class Pin:
 
 
 class Display:
-    __slots__ = ("rotation", "root_group", "refresh_count")
+    __slots__ = (
+        "rotation", "root_group", "refresh_count", "width", "height",
+        "time_to_refresh", "busy",
+    )
 
     def __init__(self):
         self.rotation = 0
         self.root_group = None
         self.refresh_count = 0
+        self.width = 800
+        self.height = 480
+        self.time_to_refresh = 0.0
+        self.busy = False
 
     def refresh(self):
         self.refresh_count += 1
@@ -205,6 +212,24 @@ class HardwareEnvironment:
         self.sessions = []
         self.sleep_alarms = []
         self.storage_writes = []
+        self.logs = []
+
+        xbrut_log = ModuleType("xbrut_log")
+
+        def record(level, component, message):
+            if not isinstance(component, str) or not isinstance(message, str):
+                raise TypeError("log component and message must be strings")
+            self.logs.append((level, component, message))
+
+        def debug(component, message): record("debug", component, message)
+        def info(component, message): record("info", component, message)
+        def error(component, message): record("error", component, message)
+        def safe_url(url): return url.split("?", 1)[0]
+
+        xbrut_log.debug = debug
+        xbrut_log.info = info
+        xbrut_log.error = error
+        xbrut_log.safe_url = safe_url
 
         board = ModuleType("board")
         board.DISPLAY = self.display
@@ -288,6 +313,7 @@ class HardwareEnvironment:
             "alarm": alarm,
             "alarm.pin": alarm_pin,
             "xbrut_storage": storage,
+            "xbrut_log": xbrut_log,
         }
 
     def queue_response(self, chunks, content_length=None, error=None):

@@ -1,35 +1,40 @@
 """Tiny filesystem helpers shared by device and simulator adapters."""
 import json
+from xbrut_log import debug, error
 
 
 def read_json(path, default=None):
+    debug("storage", "read_json %s" % path)
     try:
         with open(path, "r") as handle:
-            return json.load(handle)
-    except (OSError, ValueError):
+            value = json.load(handle)
+        debug("storage", "read_json ok %s" % path)
+        return value
+    except (OSError, ValueError) as problem:
+        debug("storage", "read_json default %s: %r" % (path, problem))
         return default
 
 
 def write_json(path, value):
+    debug("storage", "write_json begin %s" % path)
     temporary = path + ".new"
-    with open(temporary, "w") as handle:
-        json.dump(value, handle)
     try:
-        import os
-        os.rename(temporary, path)
-    except OSError:
-        # FAT does not always permit replacing an existing name.
+        with open(temporary, "w") as handle:
+            json.dump(value, handle)
         try:
+            import os
+            os.rename(temporary, path)
+        except OSError:
+            # FAT does not always permit replacing an existing name.
             import os
             os.remove(path)
             os.rename(temporary, path)
-        except OSError:
-            raise
+    except Exception as problem:
+        error("storage", "write_json failed %s: %r" % (path, problem))
+        raise
+    debug("storage", "write_json complete %s" % path)
 
 
 def append_log(message):
-    try:
-        with open("/base.log", "a") as handle:
-            handle.write(message + "\n")
-    except OSError:
-        pass
+    """Compatibility wrapper for project code using the old logging helper."""
+    error("base", message)

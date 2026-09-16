@@ -77,6 +77,16 @@ backup-and-reflash path. This board does not provide a CIRCUITPY USB drive.
 `base-conf.json` and `base.log` live at the CIRCUITPY root. They are mutable
 configuration and diagnostics, not reader content storage.
 
+Verbose logging is enabled by default. AP mode's web settings expose the
+overall `log_level`: `debug`, `info`, `error`, or `off`. Log lines include
+monotonic time, severity, and subsystem. `base.log` rotates at 128 KiB, keeping
+one older `/base.log.1`; passwords and URL query strings are not logged.
+Read the rotated file with:
+
+```sh
+tools/read-base-log.py --port /dev/ttyACM0 --path /base.log.1
+```
+
 To read the device log without a mounted CIRCUITPY drive:
 
 ```sh

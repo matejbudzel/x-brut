@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.1.1",
   "files": [
     {"path": "code.py", "url": "device/CIRCUITPY/code.py"},
     {"path": "project.py", "url": "device/CIRCUITPY/project.py"},
@@ -10,8 +10,9 @@
     {"path": "base/framebuffer.py", "url": "device/CIRCUITPY/base/framebuffer.py"},
     {"path": "base/hardware.py", "url": "device/CIRCUITPY/base/hardware.py"},
     {"path": "base/ota.py", "url": "device/CIRCUITPY/base/ota.py"},
-    {"path": "base/storage.py", "url": "device/CIRCUITPY/base/storage.py"},
     {"path": "base/ui.py", "url": "device/CIRCUITPY/base/ui.py"},
+    {"path": "base/xbrut_log.py", "url": "device/CIRCUITPY/base/xbrut_log.py"},
+    {"path": "base/xbrut_storage.py", "url": "device/CIRCUITPY/base/xbrut_storage.py"},
     {"path": "base/sweet16mono.f8", "url": "device/CIRCUITPY/base/sweet16mono.f8"},
     {"path": "base/SWEET16-LICENSE.txt", "url": "device/CIRCUITPY/base/SWEET16-LICENSE.txt"}
   ]

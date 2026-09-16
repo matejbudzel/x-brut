@@ -4,8 +4,8 @@ HTML = b'''<!doctype html>
 <title>X Brut</title>
 <style>
 body { max-width:42rem; margin:2rem auto; background:#eee; color:#111; font:16px monospace; }
-input, button { box-sizing:border-box; height:2.75rem; font:inherit; }
-input { width:100%; margin:.3rem 0 1rem; padding:.5rem; }
+input, select, button { box-sizing:border-box; height:2.75rem; font:inherit; }
+input, select { width:100%; margin:.3rem 0 1rem; padding:.5rem; }
 button { padding:0 .8rem; }
 .url { display:flex; gap:.5rem; align-items:center; }
 .url input { margin-bottom:.5rem; }
@@ -22,6 +22,14 @@ button { padding:0 .8rem; }
   <h2>AP mode</h2>
   SSID <input name="ap_ssid">
   PWD <input name="ap_password">
+  <h2>Diagnostics</h2>
+  Log level
+  <select name="log_level">
+    <option value="debug">Debug (verbose)</option>
+    <option value="info">Info</option>
+    <option value="error">Errors only</option>
+    <option value="off">Off</option>
+  </select>
   <h2>xViewer</h2>
   <div id="urls"></div>
   <button class="wide" type="button" id="add">Add URL</button>

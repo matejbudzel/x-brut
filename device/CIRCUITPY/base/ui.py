@@ -1,5 +1,6 @@
 from framebuffer import Framebuffer
 from __init__ import BASE_VERSION
+from xbrut_log import debug, info
 
 CONTENT_X = 18
 
@@ -11,8 +12,10 @@ class BaseUI:
         self.lines, self.actions = [], []
         self.title = "xBrut"
         self.bottom_labels, self.side_labels = ("", "", "", ""), ("", "")
+        debug("ui", "BaseUI initialized")
 
     def show(self, page, title, lines=(), actions=(), bottom_labels=("Back", "Open", "v", "v"), side_labels=("v", "v"), focus=0):
+        info("ui", "show page=%s title=%s focus=%d lines=%d actions=%d" % (page, title, focus, len(lines), len(actions)))
         self.page, self.title, self.focus, self.lines, self.actions = page, title, focus, list(lines), list(actions)
         self.bottom_labels, self.side_labels = bottom_labels, side_labels
         self.frame.clear(); self.frame.text(CONTENT_X, 22, title, 2)
@@ -41,9 +44,11 @@ class BaseUI:
             else: self.frame.text(CONTENT_X + 4, y, action[0], 1)
             y += 28
         self._labels(); self.platform.refresh()
+        debug("ui", "show complete page=%s" % page)
 
     def splash(self, project_name=""):
         """Fallback splash when no downloaded raw splash is installed."""
+        info("ui", "show sleeping splash project=%s" % (project_name or "-"))
         self.page, self.actions, self.lines = "splash", [], []
         self.frame.clear()
         # Sweet16 Mono is eight pixels wide per glyph. Keep title/name centered
@@ -60,8 +65,10 @@ class BaseUI:
             self.frame.text(title_x, 350, "xBrut", title_scale)
         self.frame.text(16, 770, "sleeping...")
         self.platform.refresh()
+        debug("ui", "sleeping splash refresh complete")
 
     def home(self, project=None):
+        debug("ui", "home requested project=%s" % getattr(project, "PROJECT_NAME", "none"))
         project_label = getattr(project, "HOME_ACTION_LABEL", "") if project else ""
         title = getattr(project, "PROJECT_NAME", "xBrut") if project else "xBrut"
         self.show("home", title, ["READY"], bottom_labels=("Settings", project_label, "", ""), side_labels=("", ""))
@@ -84,6 +91,7 @@ class BaseUI:
         self._label_centered(470, 412, self.side_labels[1])
 
     def settings(self, project, focus=0):
+        info("ui", "settings requested focus=%d" % focus)
         name = getattr(project, "PROJECT_NAME", "- NO PROJECT INSTALLED -") if project else "- NO PROJECT INSTALLED -"
         version = getattr(project, "PROJECT_VERSION", "") if project else ""
         lines = [("Base version: ", BASE_VERSION), ("Project: ", name)]
@@ -97,6 +105,7 @@ class BaseUI:
         self.show("settings", "SETTINGS", lines, actions, focus=focus)
 
     def button(self, name):
+        debug("ui", "button name=%s page=%s focus=%d" % (name, self.page, self.focus))
         if name == "left": return "back"
         if name in ("up", "side_up", "button_3") and self.actions:
             self.focus = (self.focus - 1) % len(self.actions)
@@ -104,7 +113,10 @@ class BaseUI:
         elif name in ("down", "side_down", "button_4") and self.actions:
             self.focus = (self.focus + 1) % len(self.actions)
             while self.actions[self.focus][1] == "section": self.focus = (self.focus + 1) % len(self.actions)
-        elif name in ("confirm", "button_2") and self.actions and self.actions[self.focus][1] != "section": return self.actions[self.focus][1]
+        elif name in ("confirm", "button_2") and self.actions and self.actions[self.focus][1] != "section":
+            result = self.actions[self.focus][1]
+            info("ui", "button action=%s" % result)
+            return result
         self.show(
             self.page, self.title, self.lines, self.actions,
             self.bottom_labels, self.side_labels, self.focus,

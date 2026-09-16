@@ -1,4 +1,6 @@
 """The shared portrait 480x800 monochrome drawing surface using Sweet16 Mono."""
+from xbrut_log import debug
+
 # X Brut is portrait-first. The X4 adapter rotates the physical panel.
 WIDTH, HEIGHT, ROW_BYTES = 480, 800, 60
 
@@ -11,15 +13,17 @@ _FONT = {
 for _ch, _rows in {"A":(14,17,17,31,17,17,17),"B":(30,17,17,30,17,17,30),"C":(15,16,16,16,16,16,15),"D":(30,17,17,17,17,17,30),"E":(31,16,16,30,16,16,31),"F":(31,16,16,30,16,16,16),"G":(15,16,16,23,17,17,15),"H":(17,17,17,31,17,17,17),"I":(31,4,4,4,4,4,31),"J":(7,2,2,2,18,18,12),"K":(17,18,20,24,20,18,17),"L":(16,16,16,16,16,16,31),"M":(17,27,21,21,17,17,17),"N":(17,25,21,19,17,17,17),"O":(14,17,17,17,17,17,14),"P":(30,17,17,30,16,16,16),"Q":(14,17,17,17,21,18,13),"R":(30,17,17,30,20,18,17),"S":(15,16,16,14,1,1,30),"T":(31,4,4,4,4,4,4),"U":(17,17,17,17,17,17,14),"V":(17,17,17,17,17,10,4),"W":(17,17,17,21,21,21,10),"X":(17,17,10,4,10,17,17),"Y":(17,17,10,4,4,4,4),"Z":(31,1,2,4,8,16,31),"0":(14,17,19,21,25,17,14),"1":(4,12,4,4,4,4,14),"2":(14,17,1,2,4,8,31),"3":(30,1,1,14,1,1,30),"4":(2,6,10,18,31,2,2),"5":(31,16,16,30,1,1,30),"6":(14,16,16,30,17,17,14),"7":(31,1,2,4,8,8,8),"8":(14,17,17,14,17,17,14),"9":(14,17,17,15,1,1,14)}.items(): _FONT[_ch] = _rows
 try:
     with open("/base/sweet16mono.f8", "rb") as _font_file: _SWEET16 = _font_file.read()
+    debug("framebuffer", "font loaded from device bytes=%d" % len(_SWEET16))
 except OSError:  # Desktop simulator imports the same module directly.
     import os
     with open(os.path.join(os.path.dirname(__file__), "sweet16mono.f8"), "rb") as _font_file: _SWEET16 = _font_file.read()
+    debug("framebuffer", "font loaded from desktop bytes=%d" % len(_SWEET16))
 
 
 class Framebuffer:
     """Drawing API backed by the platform's memory-appropriate surface."""
-    def __init__(self, platform): self.platform = platform
-    def clear(self): self.platform.clear()
+    def __init__(self, platform): self.platform = platform; debug("framebuffer", "initialized")
+    def clear(self): debug("framebuffer", "clear"); self.platform.clear()
     def pixel(self, x, y, on=True):
         if 0 <= x < WIDTH and 0 <= y < HEIGHT:
             self.platform.pixel(x, y, on)
@@ -27,11 +31,13 @@ class Framebuffer:
         for yy in range(y, y + height):
             for xx in range(x, x + width): self.pixel(xx, yy, on)
     def outline(self, x, y, width, height, on=True):
+        debug("framebuffer", "outline x=%d y=%d width=%d height=%d on=%s" % (x, y, width, height, on))
         for xx in range(x, x + width):
             self.pixel(xx, y, on); self.pixel(xx, y + height - 1, on)
         for yy in range(y, y + height):
             self.pixel(x, yy, on); self.pixel(x + width - 1, yy, on)
     def text(self, x, y, text, scale=1):
+        debug("framebuffer", "text x=%d y=%d scale=%d chars=%d" % (x, y, scale, len(text)))
         for char in text:
             code = ord(char) if ord(char) < 384 else ord("?")
             glyph = _SWEET16[code * 16:(code + 1) * 16]
@@ -42,11 +48,13 @@ class Framebuffer:
 
     def text_bold(self, x, y, text, scale=1):
         """Slight bitmap emboldening without adding a second font asset."""
+        debug("framebuffer", "text_bold x=%d y=%d scale=%d chars=%d" % (x, y, scale, len(text)))
         self.text(x, y, text, scale)
         self.text(x + scale, y, text, scale)
 
     def text_rotated_180(self, x, y, text, scale=1):
         """Draw Sweet16 text rotated in bitmap space, without a second glyph."""
+        debug("framebuffer", "text_rotated x=%d y=%d scale=%d chars=%d" % (x, y, scale, len(text)))
         for char in text:
             code = ord(char) if ord(char) < 384 else ord("?")
             glyph = _SWEET16[code * 16:(code + 1) * 16]

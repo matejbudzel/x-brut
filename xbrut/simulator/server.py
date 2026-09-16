@@ -9,12 +9,14 @@ sys.path.insert(0, os.path.join(ROOT, "device", "CIRCUITPY"))
 from ui import BaseUI
 from ap import HTML as AP_HTML
 from ota import OTA
+import xbrut_log
 import project
 
 SIMULATOR_DATA = os.path.join(ROOT, ".simulator")
 CONFIG_PATH = os.path.join(SIMULATOR_DATA, "base-conf.json")
 LOG_PATH = os.path.join(SIMULATOR_DATA, "base.log")
-CONFIG_KEYS = ("wifi_ssid", "wifi_password", "manifest_url", "splash_url", "ap_ssid", "ap_password")
+CONFIG_KEYS = ("wifi_ssid", "wifi_password", "manifest_url", "splash_url", "ap_ssid", "ap_password", "log_level")
+xbrut_log.set_path(LOG_PATH)
 
 
 def read_config():
@@ -32,13 +34,14 @@ def write_config(value):
 
 def log(message):
     os.makedirs(SIMULATOR_DATA, exist_ok=True)
-    with open(LOG_PATH, "a") as handle: handle.write(message + "\n")
+    xbrut_log.info("simulator", message)
 
 
 def ensure_ap_config():
     config = read_config()
     changed = False
     if not config.get("ap_ssid"): config["ap_ssid"] = "x-brut"; changed = True
+    if not config.get("log_level"): config["log_level"] = "debug"; changed = True
     if not config.get("ap_password"):
         alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         config["ap_password"] = "".join(random.choice(alphabet) for _ in range(12)); changed = True
@@ -55,6 +58,7 @@ def ap_handler():
             if self.path == "/": return self.reply(200, "text/html; charset=utf-8", AP_HTML)
             if self.path == "/api/settings":
                 value = read_config(); project.set_root(SIMULATOR_DATA)
+                value.setdefault("log_level", "debug")
                 value["document_urls"] = project.config().get("document_urls", [])
                 return self.json(200, value)
             self.send_error(404)
@@ -63,11 +67,13 @@ def ap_handler():
             try:
                 raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
                 incoming = json.loads(raw.decode("utf-8"))
+                if "log_level" in incoming and incoming["log_level"] not in xbrut_log.LOG_LEVELS:
+                    raise ValueError("invalid log level")
                 config = read_config()
                 config.pop("ap_base_ip", None)  # migrate old simulator data on save
                 for key in CONFIG_KEYS:
                     if key in incoming: config[key] = incoming[key]
-                write_config(config); self.json(200, {"ok": True})
+                write_config(config); xbrut_log.configure(config); self.json(200, {"ok": True})
                 if "document_urls" in incoming:
                     project.set_root(SIMULATOR_DATA)
                     project.save_urls(incoming["document_urls"])
@@ -119,6 +125,8 @@ class Platform:
 
 class Simulator:
     def __init__(self, ap_host, ap_port):
+        xbrut_log.configure(read_config())
+        xbrut_log.info("simulator", "initializing")
         project.set_root(SIMULATOR_DATA)
         self.project = project
         self.platform = Platform(); self.ui = BaseUI(self.platform); self.powered = True; self.project_name = "xViewer"; self.revision = uuid.uuid4().hex

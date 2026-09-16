@@ -30,6 +30,8 @@ def main():
         device.write(command.encode("ascii") + b"\r\n")
         device.flush()
         print(prompt(device).decode("utf-8", "replace"), end="")
+        device.write(b"\x04")  # Resume the installed application after reading.
+        device.flush()
 
 
 if __name__ == "__main__":
