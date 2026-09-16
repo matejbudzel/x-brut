@@ -1,6 +1,6 @@
 """xViewer: URL-managed XTC/XTH document library for the X Brut base."""
 import os
-from storage import read_json, write_json
+from xbrut_storage import read_json, write_json
 
 PROJECT_NAME = "xViewer"
 PROJECT_VERSION = "0.1.0"

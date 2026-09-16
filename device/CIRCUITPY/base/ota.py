@@ -1,5 +1,5 @@
 import hashlib, os
-from storage import append_log
+from xbrut_storage import append_log
 
 
 class OTA:

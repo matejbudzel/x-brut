@@ -36,7 +36,7 @@ class X4Platform:
         import random
         if not conf.get("ap_password"):
             alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; conf["ap_password"] = "".join(random.choice(alphabet) for _ in range(12))
-            from storage import write_json; write_json("/base-conf.json", conf)
+            from xbrut_storage import write_json; write_json("/base-conf.json", conf)
         wifi.radio.start_ap(conf.get("ap_ssid", "x-brut"), conf["ap_password"])
     def socket_pool(self): return socketpool.SocketPool(wifi.radio)
     def ap_address(self): return wifi.radio.ipv4_address_ap

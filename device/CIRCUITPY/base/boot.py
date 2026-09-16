@@ -1,6 +1,6 @@
 """Device orchestration; a damaged project never prevents the settings UI."""
 import supervisor, time
-from storage import read_json, append_log
+from xbrut_storage import read_json, append_log
 from ui import BaseUI
 from ota import OTA
 
