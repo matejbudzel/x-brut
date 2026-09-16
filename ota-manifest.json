@@ -2,6 +2,7 @@
   "version": "0.1.0",
   "files": [
     {"path": "code.py", "url": "device/CIRCUITPY/code.py"},
+    {"path": "project.py", "url": "device/CIRCUITPY/project.py"},
     {"path": "base/__init__.py", "url": "device/CIRCUITPY/base/__init__.py"},
     {"path": "base/ap.py", "url": "device/CIRCUITPY/base/ap.py"},
     {"path": "base/boot.py", "url": "device/CIRCUITPY/base/boot.py"},
