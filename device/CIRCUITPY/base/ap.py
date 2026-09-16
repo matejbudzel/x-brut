@@ -1,7 +1,6 @@
 """AP settings API; requires adafruit_httpserver on the device."""
 from xbrut_storage import read_json, write_json
-
-HTML = b'''<!doctype html><meta charset=utf-8><title>X Brut</title><style>body{max-width:42rem;margin:2rem auto;background:#eee;color:#111;font:16px monospace}input{width:100%;box-sizing:border-box;margin:.3rem 0 1rem;padding:.5rem}button{padding:.6rem 2rem}</style><h1>X Brut</h1><form id=f><h2>Client mode</h2>Wifi SSID<input name=wifi_ssid>Wifi PWD<input type=password name=wifi_password>Manifest URL<input name=manifest_url>Splash URL<input name=splash_url><h2>AP mode</h2>SSID<input name=ap_ssid>PWD<input name=ap_password><button>Save</button> <span id=s></span></form><script>let f=document.forms.f;fetch('/api/settings').then(x=>x.json()).then(x=>Object.keys(x).forEach(k=>f[k]&&(f[k].value=x[k])));f.onsubmit=e=>{e.preventDefault();fetch('/api/settings',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(f))),headers:{'content-type':'application/json'}}).then(x=>x.json()).then(x=>s.textContent=x.ok?'saved':x.error)}</script>'''
+from ap_page import HTML
 
 def start(platform):
     """Start the AP and return a server which the main loop polls."""
@@ -16,7 +15,10 @@ def start(platform):
 
     @server.route("/api/settings")
     def get_settings(request):
-        return JSONResponse(request, read_json("/base-conf.json", {}) or {})
+        value = read_json("/base-conf.json", {}) or {}
+        import project
+        value["document_urls"] = project.config().get("document_urls", [])
+        return JSONResponse(request, value)
 
     @server.route("/api/settings", methods=[POST])
     def put_settings(request):
@@ -29,6 +31,9 @@ def start(platform):
             for key in allowed:
                 if key in value: current[key] = value[key]
             write_json("/base-conf.json", current)
+            if "document_urls" in value:
+                import project
+                project.save_urls(value["document_urls"])
             return JSONResponse(request, {"ok": True})
         except Exception as error:
             return JSONResponse(request, {"ok": False, "error": str(error)}, status=400)

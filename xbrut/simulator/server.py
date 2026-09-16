@@ -5,9 +5,11 @@ from urllib.request import urlopen
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "device", "CIRCUITPY", "base"))
+sys.path.insert(0, os.path.join(ROOT, "device", "CIRCUITPY"))
 from ui import BaseUI
 from ap import HTML as AP_HTML
 from ota import OTA
+import project
 
 SIMULATOR_DATA = os.path.join(ROOT, ".simulator")
 CONFIG_PATH = os.path.join(SIMULATOR_DATA, "base-conf.json")
@@ -51,7 +53,10 @@ def ap_handler():
         def json(self, status, value): self.reply(status, "application/json", json.dumps(value).encode())
         def do_GET(self):
             if self.path == "/": return self.reply(200, "text/html; charset=utf-8", AP_HTML)
-            if self.path == "/api/settings": return self.json(200, read_config())
+            if self.path == "/api/settings":
+                value = read_config(); project.set_root(SIMULATOR_DATA)
+                value["document_urls"] = project.config().get("document_urls", [])
+                return self.json(200, value)
             self.send_error(404)
         def do_POST(self):
             if self.path != "/api/settings": self.send_error(404); return
@@ -63,6 +68,9 @@ def ap_handler():
                 for key in CONFIG_KEYS:
                     if key in incoming: config[key] = incoming[key]
                 write_config(config); self.json(200, {"ok": True})
+                if "document_urls" in incoming:
+                    project.set_root(SIMULATOR_DATA)
+                    project.save_urls(incoming["document_urls"])
             except Exception as error:
                 log("settings save failed: %r" % error); self.json(400, {"ok": False, "error": str(error)})
         def log_message(self, format_string, *args): log("ap: " + format_string % args)
@@ -91,8 +99,16 @@ class Platform:
         if password == "bad": raise RuntimeError("bad password")
         self.wifi = True
     def json(self, url): return json.loads(self.bytes(url).decode("utf-8"))
-    def bytes(self, url):
-        with urlopen(url, timeout=20) as response: return response.read()
+    def bytes(self, url, progress=None):
+        with urlopen(url, timeout=20) as response:
+            total = int(response.headers.get("Content-Length", "0")); data = bytearray()
+            while True:
+                chunk = response.read(4096)
+                if not chunk: break
+                data.extend(chunk)
+                if progress and total: progress(len(data) * 100 // total)
+            if progress: progress(100)
+            return bytes(data)
     def start_ap(self, conf):
         if not conf.get("ap_password"):
             conf["ap_password"] = "SIMULATOR123"; conf["ap_ssid"] = conf.get("ap_ssid", "x-brut")
@@ -100,10 +116,21 @@ class Platform:
 
 class Simulator:
     def __init__(self, ap_host, ap_port):
-        self.platform = Platform(); self.ui = BaseUI(self.platform); self.powered = True; self.project_name = ""; self.revision = uuid.uuid4().hex
+        project.set_root(SIMULATOR_DATA)
+        self.project = project
+        self.platform = Platform(); self.ui = BaseUI(self.platform); self.powered = True; self.project_name = "xViewer"; self.revision = uuid.uuid4().hex
         self.ap_host, self.ap_port, self.ap_server, self.ap_thread = ap_host, ap_port, None, None
         self.ap_advertised_host = socket.gethostname()
-        self.ui.home()
+        self.show_home()
+
+    def show_home(self):
+        documents = self.project.downloaded()
+        if not documents:
+            self.ui.show("home", "xViewer", ["- NO DOCUMENTS AVAILABLE -"], bottom_labels=("Settings", "", "", ""), side_labels=("", ""))
+            return
+        lines = [entry[1].get("title") or entry[0] for entry in documents]
+        arrows = ("v", "v") if len(lines) > 1 else ("", "")
+        self.ui.show("home", "xViewer", lines, bottom_labels=("Settings", "Read", "v" if arrows[0] else "", "v" if arrows[1] else ""), side_labels=arrows)
 
     def start_ap(self):
         config = ensure_ap_config()
@@ -118,20 +145,20 @@ class Simulator:
     def button(self, button):
         if button == "power":
             self.powered = not self.powered
-            if self.powered: self.ui.home()
+            if self.powered: self.show_home()
             elif os.path.exists(os.path.join(SIMULATOR_DATA, "splash.bin")):
                 with open(os.path.join(SIMULATOR_DATA, "splash.bin"), "rb") as handle: self.platform.present(handle.read())
                 self.ui.page = "splash"
             else: self.ui.splash(self.project_name)
             return
         if not self.powered: return
-        if button == "left" and self.ui.page == "home": self.ui.settings(None); return
+        if button == "left" and self.ui.page == "home": self.ui.settings(self.project); return
         result = self.ui.button(button)
         if result == "back":
-            if self.ui.page == "ota": self.ui.settings(None)
-            elif self.ui.page == "ap": self.stop_ap(); self.ui.settings(None, focus=2)
-            elif self.ui.page == "splash_update": self.ui.settings(None, focus=1)
-            else: self.ui.home()
+            if self.ui.page == "ota": self.ui.settings(self.project)
+            elif self.ui.page == "ap": self.stop_ap(); self.ui.settings(self.project, focus=2)
+            elif self.ui.page == "splash_update": self.ui.settings(self.project, focus=1)
+            else: self.show_home()
             return
         if result == "ota":
             if read_config().get("manifest_url"):
@@ -143,6 +170,9 @@ class Simulator:
                 self.ui.show("splash_update", "SPLASH SCREEN", ["SPLASH AVAILABLE"], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
             else:
                 self.ui.show("splash_update", "SPLASH SCREEN", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        elif result and result.startswith("document:"):
+            index = int(result.split(":", 1)[1]); self.current_document_index = index; url = self.project.config()["document_urls"][index]
+            self.ui.show("document", "DOWNLOAD", ["DOWNLOAD", self.project.short_url(url)], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
         elif result == "ap":
             try:
                 config = self.start_ap()
@@ -153,7 +183,12 @@ class Simulator:
         elif result == "download":
             config = read_config()
             try:
-                if self.ui.page == "splash_update":
+                if self.ui.page == "document":
+                    url = self.project.config()["document_urls"][self.current_document_index]
+                    def progress(percent): self.ui.show("document", "DOWNLOAD", ["DOWNLOADING %d%%" % percent], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+                    info = self.project.download(self.platform, self.current_document_index, progress)
+                    self.ui.show("document", "DOWNLOAD", [("Title: ", info.get("title") or "-"), ("Author: ", info.get("author") or "-")], bottom_labels=("Back", "Read", "", ""), side_labels=("", ""))
+                elif self.ui.page == "splash_update":
                     OTA(self.platform, SIMULATOR_DATA).download_splash(config["splash_url"])
                     self.ui.show("splash_update", "SPLASH SCREEN", ["SPLASH SCREEN REPLACED"], bottom_labels=("Back", "Preview", "", "Revert"), side_labels=("", ""))
                 else:
@@ -163,7 +198,8 @@ class Simulator:
                 message = "UNSUPPORTED FORMAT" if str(error) == "UNSUPPORTED_FORMAT" else "- FETCH FAILED -"
                 self.ui.show(self.ui.page, self.ui.title, [message], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
             except Exception as error:
-                log("download failed: %r" % error)
+                url = locals().get("url", "unknown")
+                log("download failed for %s: %r" % (url, error))
                 self.ui.show(self.ui.page, self.ui.title, ["- FETCH FAILED -"], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
 
 

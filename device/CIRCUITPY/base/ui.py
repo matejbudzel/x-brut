@@ -25,10 +25,21 @@ class BaseUI:
             else:
                 self.frame.text(CONTENT_X, y, line)
             y += 28
+        y = 82 + (len(self.lines) + 1) * 28
+        document_gap = True
         for index, action in enumerate(self.actions):
-            y = 82 + (len(self.lines) + index + 1) * 28
+            if action[1] == "section":
+                y += 20
+                self.frame.text_bold(CONTENT_X, y, "[ " + action[0] + " ]")
+                y += 28
+                document_gap = False
+                continue
+            if document_gap and action[1].startswith("document:"):
+                y += 20
+                document_gap = False
             if index == self.focus: self.frame.outline(CONTENT_X, y - 5, 480 - CONTENT_X, 26); self.frame.text(CONTENT_X + 4, y, action[0], 1)
             else: self.frame.text(CONTENT_X + 4, y, action[0], 1)
+            y += 28
         self._labels(); self.platform.refresh()
 
     def splash(self, project_name=""):
@@ -52,7 +63,8 @@ class BaseUI:
 
     def home(self, project=None):
         project_label = getattr(project, "HOME_ACTION_LABEL", "") if project else ""
-        self.show("home", "xBrut", ["READY"], bottom_labels=("Settings", project_label, "", ""), side_labels=("", ""))
+        title = getattr(project, "PROJECT_NAME", "xBrut") if project else "xBrut"
+        self.show("home", title, ["READY"], bottom_labels=("Settings", project_label, "", ""), side_labels=("", ""))
 
     def _label_centered(self, center, y, label, rotated=False):
         if label:
@@ -74,17 +86,25 @@ class BaseUI:
     def settings(self, project, focus=0):
         name = getattr(project, "PROJECT_NAME", "- NO PROJECT INSTALLED -") if project else "- NO PROJECT INSTALLED -"
         version = getattr(project, "PROJECT_VERSION", "") if project else ""
-        lines = [("Version: ", BASE_VERSION), ("Project: ", name)]
+        lines = [("Base version: ", BASE_VERSION), ("Project: ", name)]
         if version: lines.append(("Project version: ", version))
-        self.show("settings", "SETTINGS", lines, [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap")], focus=focus)
+        actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap")]
+        if project and hasattr(project, "config"):
+            urls = project.config().get("document_urls", [])
+            if urls:
+                actions.append((project.PROJECT_NAME, "section"))
+                for index, url in enumerate(urls): actions.append((project.short_url(url), "document:%d" % index))
+        self.show("settings", "SETTINGS", lines, actions, focus=focus)
 
     def button(self, name):
         if name == "left": return "back"
         if name in ("up", "side_up", "button_3") and self.actions:
             self.focus = (self.focus - 1) % len(self.actions)
+            while self.actions[self.focus][1] == "section": self.focus = (self.focus - 1) % len(self.actions)
         elif name in ("down", "side_down", "button_4") and self.actions:
             self.focus = (self.focus + 1) % len(self.actions)
-        elif name in ("confirm", "button_2") and self.actions: return self.actions[self.focus][1]
+            while self.actions[self.focus][1] == "section": self.focus = (self.focus + 1) % len(self.actions)
+        elif name in ("confirm", "button_2") and self.actions and self.actions[self.focus][1] != "section": return self.actions[self.focus][1]
         self.show(
             self.page, self.title, self.lines, self.actions,
             self.bottom_labels, self.side_labels, self.focus,

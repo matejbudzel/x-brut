@@ -6,10 +6,20 @@ PROJECT_NAME = "xViewer"
 PROJECT_VERSION = "0.1.0"
 PROJECT_CONFIG_PATH = "/project-conf.json"
 DOCUMENTS_DIRECTORY = "/xviewer-docs"
+_ROOT = ""
+
+
+def set_root(path):
+    """Simulator hook. Device leaves this at the CircuitPython root."""
+    global _ROOT
+    _ROOT = path.rstrip("/")
+
+
+def _path(path): return _ROOT + path
 
 
 def config():
-    value = read_json(PROJECT_CONFIG_PATH, {}) or {}
+    value = read_json(_path(PROJECT_CONFIG_PATH), {}) or {}
     value["document_urls"] = [url for url in value.get("document_urls", []) if url]
     return value
 
@@ -17,7 +27,7 @@ def config():
 def save_urls(urls):
     value = config()
     value["document_urls"] = [url.strip() for url in urls if url and url.strip()]
-    write_json(PROJECT_CONFIG_PATH, value)
+    write_json(_path(PROJECT_CONFIG_PATH), value)
 
 
 def short_url(url, limit=42):
@@ -44,22 +54,23 @@ def metadata(path):
 
 
 def downloaded():
-    try: names = os.listdir(DOCUMENTS_DIRECTORY)
+    try: names = os.listdir(_path(DOCUMENTS_DIRECTORY))
     except OSError: return []
     result = []
     for name in names:
         if name.endswith(".xth"):
-            try: result.append((name, metadata(DOCUMENTS_DIRECTORY + "/" + name)))
+            try: result.append((name, metadata(_path(DOCUMENTS_DIRECTORY + "/" + name))) )
             except Exception: pass
     return result
 
 
-def download(platform, index):
+def download(platform, index, progress=None):
     urls = config()["document_urls"]
-    data = platform.bytes(urls[index])
-    try: os.mkdir(DOCUMENTS_DIRECTORY)
+    data = platform.bytes(urls[index], progress)
+    directory = _path(DOCUMENTS_DIRECTORY)
+    try: os.mkdir(directory)
     except OSError: pass
-    path = DOCUMENTS_DIRECTORY + "/" + document_name(index)
+    path = directory + "/" + document_name(index)
     with open(path + ".new", "wb") as handle: handle.write(data)
     metadata(path + ".new")
     try: os.rename(path, path + ".bak")

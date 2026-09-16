@@ -42,10 +42,16 @@ class X4Platform:
     def json(self, url):
         import json
         return json.loads(self.bytes(url).decode("utf-8"))
-    def bytes(self, url):
+    def bytes(self, url, progress=None):
         import adafruit_requests, socketpool, ssl, wifi
         session = adafruit_requests.Session(socketpool.SocketPool(wifi.radio), ssl.create_default_context()); response = session.get(url)
-        try: return response.content
+        try:
+            total, data = int(response.headers.get("content-length", "0")), bytearray()
+            for chunk in response.iter_content(chunk_size=1024):
+                data.extend(chunk)
+                if progress and total: progress(len(data) * 100 // total)
+            if progress: progress(100)
+            return bytes(data)
         finally: response.close()
     def start_ap(self, conf):
         import random, wifi

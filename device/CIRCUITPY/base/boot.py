@@ -47,6 +47,7 @@ def run():
             if result == "ota": _ota_screen(ui, platform)
             elif result == "splash": _splash_screen(ui, platform)
             elif result == "ap": _ap_screen(ui, platform)
+            elif result and result.startswith("document:"): _document_screen(ui, platform, project, int(result.split(":", 1)[1]))
         time.sleep(0.05)
 
 
@@ -151,3 +152,19 @@ def _ap_screen(ui, platform):
         time.sleep(0.02)
     platform.disconnect()
     ui.settings(_load_project(), focus=2)
+
+
+def _document_screen(ui, platform, project, index):
+    url = project.config()["document_urls"][index]
+    ui.show("document", "DOWNLOAD", ["DOWNLOAD", project.short_url(url)], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
+    while True:
+        button = platform.button()
+        if button == "left": ui.settings(project); return
+        if button in ("confirm", "button_2"):
+            try:
+                ui.show("document", "DOWNLOAD", ["DOWNLOADING..."])
+                info = project.download(platform, index)
+                ui.show("document", "DOWNLOAD", [("Title: ", info.get("title") or "-"), ("Author: ", info.get("author") or "-")], bottom_labels=("Back", "Read", "", ""), side_labels=("", ""))
+            except Exception as error:
+                append_log("document: %r" % error); ui.show("document", "DOWNLOAD", ["- FETCH FAILED -"])
+        time.sleep(0.05)
