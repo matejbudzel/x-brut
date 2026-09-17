@@ -1,6 +1,6 @@
 """Device orchestration; a damaged project never prevents the settings UI."""
 import supervisor, time
-from xbrut_storage import read_json, sd_available
+from xbrut_storage import read_json, sd_available, sd_card_status
 from xbrut_log import configure, debug, error as log_error, exception as log_exception, info, safe_url
 from xbrut_paths import BASE_CONFIG_PATH, SPLASH_PATH
 from ui import BaseUI
@@ -77,7 +77,7 @@ def _run():
             debug("boot", "left action page=%s" % ui.page)
             if navigation.route == "home":
                 navigation.push("settings", {"focus": 0})
-                ui.settings(project)
+                _settings(ui, project)
             else:
                 _back(navigation, ui, project)
         elif button == "left_long":
@@ -95,9 +95,18 @@ def _run():
             elif result == "ap":
                 navigation.update(focus=ui.focus); navigation.push("ap")
                 _ap_screen(navigation, ui, platform, project)
-            elif result == "device":
-                navigation.update(focus=ui.focus); navigation.push("device")
-                _device_screen(navigation, ui, platform, project)
+            elif result == "soft_reload":
+                info("boot", "Device soft reload requested")
+                supervisor.reload()
+            elif result == "hard_reload":
+                info("boot", "Device hard reload requested")
+                import microcontroller
+                microcontroller.reset()
+            elif result == "sleep":
+                info("boot", "Device sleep requested")
+                ui.splash(getattr(project, "PROJECT_NAME", ""))
+                platform.sleep()
+                _settings(ui, project, ui.focus)
             elif result and result.startswith("document:"):
                 navigation.update(focus=ui.focus); navigation.push("document", {"index": int(result.split(":", 1)[1])})
                 _document_screen(navigation, ui, platform, project, navigation.state["index"])
@@ -117,7 +126,7 @@ def _back(navigation, ui, project):
     if entry is None:
         return
     if entry["route"] == "settings":
-        ui.settings(project, focus=entry["state"].get("focus", 0))
+        _settings(ui, project, entry["state"].get("focus", 0))
     else:
         ui.home(project)
 
@@ -126,6 +135,10 @@ def _home(navigation, ui, project):
     """Clear route history and return to the single canonical home route."""
     navigation.home()
     ui.home(project)
+
+
+def _settings(ui, project, focus=0):
+    ui.settings(project, focus=focus, sd_status=sd_card_status())
 
 
 def _leave(navigation, ui, project, button):
@@ -274,33 +287,6 @@ def _ap_screen(navigation, ui, platform, project):
     platform.disconnect()
     _leave(navigation, ui, project, button)
     info("boot", "AP screen exit")
-
-
-def _device_screen(navigation, ui, platform, project):
-    """Run explicitly requested lifecycle actions from the Device page."""
-    from xbrut_storage import sd_card_status
-    info("boot", "Device screen enter")
-    ui.device(sd_card_status())
-    while True:
-        button = platform.button()
-        if button in ("left", "left_long"):
-            _leave(navigation, ui, project, button)
-            return
-        if button:
-            result = ui.button(button)
-            if result == "soft_reload":
-                info("boot", "Device soft reload requested")
-                supervisor.reload()
-            elif result == "hard_reload":
-                info("boot", "Device hard reload requested")
-                import microcontroller
-                microcontroller.reset()
-            elif result == "sleep":
-                info("boot", "Device sleep requested")
-                ui.splash(getattr(project, "PROJECT_NAME", ""))
-                platform.sleep()
-                ui.device(sd_card_status())
-        time.sleep(0.05)
 
 
 def _document_screen(navigation, ui, platform, project, index):

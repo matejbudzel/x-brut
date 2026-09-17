@@ -93,28 +93,22 @@ class BaseUI:
         self._label_centered(470, 372, self.side_labels[0], rotated=(self.side_labels[0] == "v"))
         self._label_centered(470, 412, self.side_labels[1])
 
-    def settings(self, project, focus=0):
+    def settings(self, project, focus=0, sd_status=""):
         info("ui", "settings requested focus=%d" % focus)
         name = getattr(project, "PROJECT_NAME", "- NO PROJECT INSTALLED -") if project else "- NO PROJECT INSTALLED -"
         version = getattr(project, "PROJECT_VERSION", "") if project else ""
         lines = [("Base version: ", BASE_VERSION), ("Project: ", name)]
         if version: lines.append(("Project version: ", version))
         if self.read_only: lines.append("NO SD CARD - DOWNLOADS DISABLED")
-        actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap"), ("DEVICE", "device")]
+        actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap")]
         if project and hasattr(project, "config"):
             urls = project.config().get("document_urls", [])
             if urls:
                 actions.append((project.PROJECT_NAME, "section"))
                 for index, url in enumerate(urls): actions.append((project.short_url(url), "document:%d" % index))
+        actions.extend([("Device", "section"), ("SOFT RELOAD", "soft_reload"), ("HARD RELOAD", "hard_reload"), ("SLEEP", "sleep")])
+        if sd_status: lines.append(("SD Card: ", sd_status))
         self.show("settings", "SETTINGS", lines, actions, focus=focus)
-
-    def device(self, sd_status, focus=0):
-        """Controls which affect this boot rather than persistent settings."""
-        self.show(
-            "device", "DEVICE", [("SD Card: ", sd_status)],
-            [("SOFT RELOAD", "soft_reload"), ("HARD RELOAD", "hard_reload"), ("SLEEP", "sleep")],
-            bottom_labels=("Back", "Run", "", ""), side_labels=("", ""), focus=focus,
-        )
 
     def button(self, name):
         debug("ui", "button name=%s page=%s focus=%d" % (name, self.page, self.focus))
