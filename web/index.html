@@ -6,10 +6,16 @@ body{margin:0;background:#d6d1c7;color:#171513;font:15px ui-monospace,monospace;
 </style>
 <h1>X BRUT / XTEINK X4 SIMULATOR</h1>
 <div id=device><canvas width=480 height=800></canvas><div class=buttons><button data-b=left>BACK / SETTINGS</button><button data-b=confirm>OK</button><button data-b=up>▲</button><button data-b=down>▼</button><button data-b=power>POWER</button></div></div>
-<p class=hint>The canvas is the device’s raw portrait 480×800 one-bit framebuffer, scaled only by CSS.</p>
+<p class=hint>The canvas is the device’s raw portrait 480×800 one-bit framebuffer, scaled only by CSS. Hold BACK / SETTINGS for 0.8 seconds to return Home.</p>
 <script>
 let c=document.querySelector('canvas'),x=c.getContext('2d'),im=x.createImageData(480,800);
 async function draw(){let b=new Uint8Array(await (await fetch('/api/screen')).arrayBuffer()),d=im.data;for(let y=0;y<800;y++)for(let q=0;q<60;q++)for(let bit=0;bit<8;bit++){let on=b[y*60+q]&(128>>bit),i=(y*480+q*8+bit)*4,v=on?0:247;d[i]=d[i+1]=d[i+2]=v;d[i+3]=255}x.putImageData(im,0,0)}
-document.querySelectorAll('button').forEach(e=>e.onclick=async()=>{await fetch('/api/button',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({button:e.dataset.b})});draw()});draw()
+async function button(name){await fetch('/api/button',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({button:name})});draw()}
+let back=document.querySelector('button[data-b=left]'),backTimer,backPointer=false,suppressBackClick=false;
+back.addEventListener('pointerdown',event=>{if(event.pointerType==='mouse'&&event.button!==0)return;event.preventDefault();backPointer=true;suppressBackClick=true;back.setPointerCapture(event.pointerId);backTimer=setTimeout(()=>{backTimer=null;button('left_long')},800)});
+function finishBack(event){if(!backPointer)return;event.preventDefault();backPointer=false;if(backTimer){clearTimeout(backTimer);backTimer=null;button('left')}}
+back.addEventListener('pointerup',finishBack);back.addEventListener('pointercancel',finishBack);
+back.onclick=event=>{if(suppressBackClick){suppressBackClick=false;event.preventDefault();return}button('left')};
+document.querySelectorAll('button:not([data-b=left])').forEach(e=>e.onclick=()=>button(e.dataset.b));draw()
 let revision;async function hot(){try{let next=(await (await fetch('/api/reload',{cache:'no-store'})).json()).revision;if(revision&&revision!==next)location.reload();revision=next}catch(e){}}hot();setInterval(hot,800)
 </script>
