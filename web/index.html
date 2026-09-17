@@ -5,7 +5,7 @@
 body{margin:0;background:#d6d1c7;color:#171513;font:15px ui-monospace,monospace;text-align:center}h1{font-size:18px;margin:18px}#device{display:inline-block;background:#252525;border-radius:18px;padding:22px 18px 15px;box-shadow:0 4px 20px #777}canvas{display:block;width:240px;height:400px;background:#f7f4e9;image-rendering:pixelated}.buttons{display:flex;gap:8px;margin-top:14px;justify-content:center}button{font:inherit;background:#ddd;border:0;border-radius:5px;padding:8px 11px;cursor:pointer}button:active{background:#999}.hint{max-width:750px;margin:16px auto;color:#514b43}
 </style>
 <h1>X BRUT / XTEINK X4 SIMULATOR</h1>
-<div id=device><canvas width=480 height=800></canvas><div class=buttons><button data-b=left>BACK / SETTINGS</button><button data-b=confirm>OK</button><button data-b=up>▲</button><button data-b=down>▼</button><button data-b=power>POWER</button></div></div>
+<div id=device><canvas width=480 height=800></canvas><div class=buttons><button data-b=left>BACK / SETTINGS</button><button data-b=confirm>OK</button><button data-b=up>▲</button><button data-b=down>▼</button><button data-b=power>POWER</button><button id=sd>SD: ON</button></div></div>
 <p class=hint>The canvas is the device’s raw portrait 480×800 one-bit framebuffer, scaled only by CSS. Hold BACK / SETTINGS for 0.8 seconds to return Home.</p>
 <script>
 let c=document.querySelector('canvas'),x=c.getContext('2d'),im=x.createImageData(480,800);
@@ -16,6 +16,7 @@ back.addEventListener('pointerdown',event=>{if(event.pointerType==='mouse'&&even
 function finishBack(event){if(!backPointer)return;event.preventDefault();backPointer=false;if(backTimer){clearTimeout(backTimer);backTimer=null;button('left')}}
 back.addEventListener('pointerup',finishBack);back.addEventListener('pointercancel',finishBack);
 back.onclick=event=>{if(suppressBackClick){suppressBackClick=false;event.preventDefault();return}button('left')};
-document.querySelectorAll('button:not([data-b=left])').forEach(e=>e.onclick=()=>button(e.dataset.b));draw()
+document.querySelectorAll('button[data-b]:not([data-b=left])').forEach(e=>e.onclick=()=>button(e.dataset.b));draw()
+document.querySelector('#sd').onclick=async event=>{let state=await (await fetch('/api/sd',{method:'POST'})).json();event.target.textContent='SD: '+(state.present?'ON':'OFF');draw()};
 let revision;async function hot(){try{let next=(await (await fetch('/api/reload',{cache:'no-store'})).json()).revision;if(revision&&revision!==next)location.reload();revision=next}catch(e){}}hot();setInterval(hot,800)
 </script>

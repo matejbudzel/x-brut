@@ -130,11 +130,16 @@ class Simulator:
         project.set_root(SIMULATOR_DATA)
         self.project = project
         self.platform = Platform(); self.ui = BaseUI(self.platform); self.powered = True; self.project_name = "xViewer"; self.revision = uuid.uuid4().hex
+        self.sd_present, self.sd_reload_required = True, False
         self.ap_host, self.ap_port, self.ap_server, self.ap_thread = ap_host, ap_port, None, None
         self.ap_advertised_host = socket.gethostname()
         self.show_home()
 
     def show_home(self):
+        self.ui.read_only = not self.sd_present or self.sd_reload_required
+        if self.ui.read_only:
+            self.ui.home(self.project)
+            return
         documents = self.project.downloaded()
         if not documents:
             self.ui.show("home", "xViewer", ["- NO DOCUMENTS AVAILABLE -"], bottom_labels=("Settings", "", "", ""), side_labels=("", ""))
@@ -142,6 +147,18 @@ class Simulator:
         lines = [entry[1].get("title") or entry[0] for entry in documents]
         arrows = ("v", "v") if len(lines) > 1 else ("", "")
         self.ui.show("home", "xViewer", lines, bottom_labels=("Settings", "Read", "v" if arrows[0] else "", "v" if arrows[1] else ""), side_labels=arrows)
+
+    def show_settings(self, focus=0):
+        status = "simulated" if self.sd_present and not self.sd_reload_required else "none"
+        self.ui.settings(self.project, focus=focus, sd_status=status)
+
+    def toggle_sd(self):
+        self.sd_present = not self.sd_present
+        if not self.sd_present:
+            self.sd_reload_required = False
+        else:
+            self.sd_reload_required = True
+        self.show_home()
 
     def start_ap(self):
         config = ensure_ap_config()
@@ -168,15 +185,16 @@ class Simulator:
             # does not retain the device route stack, but Home is its root.
             self.show_home()
             return
-        if button == "left" and self.ui.page == "home": self.ui.settings(self.project); return
+        if button == "left" and self.ui.page == "home": self.show_settings(); return
         result = self.ui.button(button)
         if result == "back":
-            if self.ui.page == "ota": self.ui.settings(self.project)
-            elif self.ui.page == "ap": self.stop_ap(); self.ui.settings(self.project, focus=2)
-            elif self.ui.page == "splash_update": self.ui.settings(self.project, focus=1)
+            if self.ui.page == "ota": self.show_settings()
+            elif self.ui.page == "ap": self.stop_ap(); self.show_settings(2)
+            elif self.ui.page == "splash_update": self.show_settings(1)
             else: self.show_home()
             return
         if result in ("soft_reload", "hard_reload"):
+            self.sd_reload_required = False
             self.show_home()
             return
         if result == "sleep":
@@ -238,6 +256,8 @@ def handler(sim):
             if self.path == "/api/status": return self.send_json({"page": sim.ui.page, "focus": sim.ui.focus, "powered": sim.powered})
             return super().do_GET()
         def do_POST(self):
+            if self.path == "/api/sd":
+                sim.toggle_sd(); return self.send_json({"present": sim.sd_present, "reload_required": sim.sd_reload_required})
             if self.path != "/api/button": self.send_error(404); return
             data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
             sim.button(data.get("button", "")); self.send_json({"ok": True})
