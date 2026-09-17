@@ -1,6 +1,7 @@
 """Only hardware-dependent adapter. X4 display is initialized by CircuitPython."""
 import board, displayio
 from xbrut_log import debug, error, info, safe_url
+from xbrut_paths import BASE_CONFIG_PATH, FRAME_PATH
 
 class X4Platform:
     def __init__(self):
@@ -10,7 +11,7 @@ class X4Platform:
         debug("hardware", "display=%s size=%sx%s" % (type(self.display).__name__, self.display.width, self.display.height))
         self.display.rotation = 270
         debug("hardware", "display rotation=270")
-        self._frame_path = "/.xbrut-frame.bmp"
+        self._frame_path = FRAME_PATH
         debug("hardware", "opening framebuffer %s" % self._frame_path)
         self._frame = open(self._frame_path, "w+b")
         # 480x800, 1-bit BMP. Rows are 60 bytes and naturally 4-byte aligned.
@@ -71,6 +72,9 @@ class X4Platform:
         # type: () -> None
         debug("hardware", "refresh begin time_to_refresh=%s busy=%s" % (self.display.time_to_refresh, self.display.busy))
         self._frame.flush()
+        if self.display.time_to_refresh > 0:
+            import time
+            time.sleep(self.display.time_to_refresh)
         try: self.display.refresh()
         except Exception as problem:
             error("hardware", "refresh failed: %r" % problem)
@@ -163,7 +167,7 @@ class X4Platform:
         info("hardware", "start AP requested ssid=%s" % conf.get("ap_ssid", "x-brut"))
         if not conf.get("ap_password"):
             alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; conf["ap_password"] = "".join(random.choice(alphabet) for _ in range(12))
-            from xbrut_storage import write_json; write_json("/base-conf.json", conf)
+            from xbrut_storage import write_json; write_json(BASE_CONFIG_PATH, conf)
             debug("hardware", "generated and persisted AP password")
         try: wifi.radio.start_ap(conf.get("ap_ssid", "x-brut"), conf["ap_password"])
         except Exception as problem:

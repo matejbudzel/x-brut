@@ -1,21 +1,20 @@
 """xViewer: URL-managed XTC/XTH document library for the X Brut base."""
 import os
 from xbrut_storage import read_json, write_json
+from xbrut_paths import DATA_ROOT, DOCUMENTS_PATH, PROJECT_CONFIG_PATH
 
 PROJECT_NAME = "xViewer"
 PROJECT_VERSION = "0.1.0"
-PROJECT_CONFIG_PATH = "/project-conf.json"
-DOCUMENTS_DIRECTORY = "/xviewer-docs"
-_ROOT = ""
+_ROOT = None
 
 
 def set_root(path):
-    """Simulator hook. Device leaves this at the CircuitPython root."""
+    """Simulator hook. Device defaults to the microSD data root."""
     global _ROOT
     _ROOT = path.rstrip("/")
 
 
-def _path(path): return _ROOT + path
+def _path(path): return path if _ROOT is None else _ROOT + path[len(DATA_ROOT):]
 
 
 def config():
@@ -54,12 +53,12 @@ def metadata(path):
 
 
 def downloaded():
-    try: names = os.listdir(_path(DOCUMENTS_DIRECTORY))
+    try: names = os.listdir(_path(DOCUMENTS_PATH))
     except OSError: return []
     result = []
     for name in names:
         if name.endswith(".xth"):
-            try: result.append((name, metadata(_path(DOCUMENTS_DIRECTORY + "/" + name))) )
+            try: result.append((name, metadata(_path(DOCUMENTS_PATH + "/" + name))) )
             except Exception: pass
     return result
 
@@ -67,7 +66,7 @@ def downloaded():
 def download(platform, index, progress=None):
     urls = config()["document_urls"]
     data = platform.bytes(urls[index], progress)
-    directory = _path(DOCUMENTS_DIRECTORY)
+    directory = _path(DOCUMENTS_PATH)
     try: os.mkdir(directory)
     except OSError: pass
     path = directory + "/" + document_name(index)

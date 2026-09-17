@@ -24,7 +24,7 @@ Use `--no-reload` to run a single non-watching worker.
 Opening **AP MODE** in the simulator also starts the device-settings SPA on
 `http://<devbox-hostname>:8001`. Its `base-conf.json` and `base.log` persist in
 the ignored `.simulator/` directory, so the next simulator run uses them just
-as the device uses its root-level configuration.
+as the device uses its microSD configuration.
 
 ## Validate before deployment
 
@@ -49,10 +49,11 @@ the final layer before deployment.
 ## Install on an X4
 
 1. Install the current [Xteink X4 CircuitPython build](https://circuitpython.org/board/xteink_x4/).
-2. Copy `device/CIRCUITPY/` to the CIRCUITPY volume.
-3. Install the libraries listed in `device/requirements.txt` into `lib/` (use
+2. Insert a FAT-formatted microSD card. X Brut requires it for all mutable data.
+3. Copy `device/CIRCUITPY/` to the CIRCUITPY volume.
+4. Install the libraries listed in `device/requirements.txt` into `lib/` (use
    `circup install adafruit_xteink_x4 adafruit_requests adafruit_httpserver`).
-4. Enter **AP mode** from the base settings and visit the shown address to set
+5. Enter **AP mode** from the base settings and visit the shown address to set
    Wi-Fi and the manifest URL (and optionally a `splash_url`). The system assigns
    the AP address (normally `192.168.4.1` on ESP32).
 
@@ -74,17 +75,22 @@ CircuitPython binary and saves a complete 16 MiB backup under `backups/`
 **before** erasing Crosspoint. Pass `--force-flash` to explicitly take that
 backup-and-reflash path. This board does not provide a CIRCUITPY USB drive.
 
-`base-conf.json` and `base.log` live at the CIRCUITPY root. They are mutable
-configuration and diagnostics, not reader content storage.
+Internal flash contains application code and libraries. All X Brut mutable data
+lives under `/sd`: `base-conf.json`, `project-conf.json`, logs, downloaded
+documents, the splash cache, and the framebuffer scratch file. On the first
+boot of base 0.1.2, existing root-level mutable files are copied to the SD card
+and removed from flash only after each successful copy. An absent or invalid SD
+card is a fatal startup error; X Brut never falls back to writing mutable data
+to internal flash.
 
 Verbose logging is enabled by default. AP mode's web settings expose the
 overall `log_level`: `debug`, `info`, `error`, or `off`. Log lines include
-monotonic time, severity, and subsystem. `base.log` rotates at 128 KiB, keeping
-one older `/base.log.1`; passwords and URL query strings are not logged.
+monotonic time, severity, and subsystem. `/sd/base.log` rotates at 128 KiB,
+keeping one older `/sd/base.log.1`; passwords and URL query strings are not logged.
 Read the rotated file with:
 
 ```sh
-tools/read-base-log.py --port /dev/ttyACM0 --path /base.log.1
+tools/read-base-log.py --port /dev/ttyACM0 --path /sd/base.log.1
 ```
 
 To read the device log without a mounted CIRCUITPY drive:

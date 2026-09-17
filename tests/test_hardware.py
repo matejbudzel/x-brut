@@ -31,7 +31,7 @@ class X4PlatformTest(unittest.TestCase):
         frame_path = self.frame_path
 
         def redirected_open(path, *args, **kwargs):
-            if path == "/.xbrut-frame.bmp":
+            if path == "/sd/.xbrut-frame.bmp":
                 path = frame_path
             return real_open(path, *args, **kwargs)
 
@@ -58,6 +58,9 @@ class X4PlatformTest(unittest.TestCase):
         self.assertEqual(int.from_bytes(data[28:30], "little"), 1)
         self.assertEqual(data[62:], b"\0" * 48000)
         self.assertEqual(self.environment.display.rotation, 270)
+        # The firmware owns and initializes the X4 display. The adapter must
+        # retain that object rather than rebuilding a competing display bus.
+        self.assertIs(self.platform.display, self.environment.display)
         group = self.environment.display.root_group
         self.assertEqual(len(group.layers), 1)
         self.assertIs(group.layers[0].bitmap, self.platform._bitmap)
@@ -150,7 +153,7 @@ class X4PlatformTest(unittest.TestCase):
         self.assertEqual(conf["ap_ssid"] if "ap_ssid" in conf else "x-brut", "x-brut")
         self.assertEqual(len(conf["ap_password"]), 12)
         self.assertTrue(set(conf["ap_password"]) <= set("ABCDEFGHJKLMNPQRSTUVWXYZ23456789"))
-        self.assertEqual(self.environment.storage_writes, [("/base-conf.json", conf)])
+        self.assertEqual(self.environment.storage_writes, [("/sd/base-conf.json", conf)])
         self.assertEqual(self.environment.radio.start_ap_calls[0][:2], ("x-brut", conf["ap_password"]))
 
     def test_bytes_streams_reports_progress_and_closes(self):

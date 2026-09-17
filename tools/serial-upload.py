@@ -17,7 +17,7 @@ WIPE_SCRIPT = b"""def remove_tree(path):
             remove_tree(child)
             os.rmdir(child)
 
-for directory in ("/base", "/lib"):
+for directory in ("/base", "/lib", "/__pycache__"):
     try:
         remove_tree(directory)
         os.rmdir(directory)
@@ -115,6 +115,8 @@ def main():
             wipe_application(device)
     files = []
     for root, _, names in os.walk(args.source):
+        if "__pycache__" in root.split(os.sep):
+            continue
         for name in names:
             path = os.path.relpath(os.path.join(root, name), args.source)
             if path != "code.py": files.append(path)

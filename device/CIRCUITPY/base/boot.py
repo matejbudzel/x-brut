@@ -2,6 +2,7 @@
 import supervisor, time
 from xbrut_storage import read_json
 from xbrut_log import configure, debug, error as log_error, exception as log_exception, info, safe_url
+from xbrut_paths import BASE_CONFIG_PATH, SPLASH_PATH
 from ui import BaseUI
 from ota import OTA
 
@@ -25,7 +26,7 @@ def _load_project():
 
 
 def _run():
-    conf = read_json("/base-conf.json", {}) or {}
+    conf = read_json(BASE_CONFIG_PATH, {}) or {}
     configure(conf)
     info("boot", "run begin log_level=%s" % conf.get("log_level", "debug"))
     from hardware import X4Platform
@@ -36,7 +37,7 @@ def _run():
     splash_loaded = False
     try:
         debug("boot", "loading cached splash")
-        platform.present_file("/splash.bin")
+        platform.present_file(SPLASH_PATH)
         splash_loaded = True
         info("boot", "cached splash displayed")
     except (OSError, ValueError) as problem:
@@ -95,7 +96,7 @@ def _ota_screen(ui, platform):
     back_only = ("Back", "", "", "")
     start_download = ("Back", "Start", "", "")
     no_sides = ("", "")
-    conf = read_json("/base-conf.json", {}) or {}
+    conf = read_json(BASE_CONFIG_PATH, {}) or {}
     if not conf.get("manifest_url"):
         info("boot", "OTA unavailable: no manifest URL")
         ui.show("ota", "OTA", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=back_only, side_labels=no_sides)
@@ -143,7 +144,7 @@ def _ota_screen(ui, platform):
 def _splash_screen(ui, platform):
     info("boot", "splash update screen enter")
     back_only, start = ("Back", "", "", ""), ("Back", "Start", "", "")
-    conf = read_json("/base-conf.json", {}) or {}
+    conf = read_json(BASE_CONFIG_PATH, {}) or {}
     if not conf.get("splash_url"):
         info("boot", "splash update unavailable: no URL")
         ui.show("splash_update", "SPLASH SCREEN", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=back_only, side_labels=("", ""))
@@ -176,7 +177,7 @@ def _splash_screen(ui, platform):
             elif not ready and button in ("confirm", "button_2"):
                 debug("boot", "splash preview requested")
                 try:
-                    platform.present_file("/splash.bin")
+                    platform.present_file(SPLASH_PATH)
                 except OSError as problem:
                     debug("boot", "splash preview fallback: %r" % problem); ui.splash("")
                 while not platform.button(): time.sleep(0.05)

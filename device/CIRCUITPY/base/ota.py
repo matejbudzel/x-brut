@@ -1,12 +1,15 @@
 import hashlib, os
 from xbrut_log import debug, error, info, safe_url
+from xbrut_paths import DATA_ROOT
 
 
 class OTA:
     def __init__(self, network, root=""):
         self.network, self.root = network, root.rstrip("/")
+        self.data_root = self.root or DATA_ROOT
         debug("ota", "initialized root=%s" % (self.root or "/"))
     def _path(self, path): return self.root + path
+    def _data_path(self, path): return self.data_root + path
     def manifest(self, url):
         """Load a manifest and expand its repository-relative file URLs."""
         info("ota", "manifest fetch begin %s" % safe_url(url))
@@ -55,15 +58,15 @@ class OTA:
                 if landscape[y * 100 + x // 8] & (128 >> (x & 7)):
                     px, py = 479 - y, x
                     portrait[py * 60 + px // 8] |= 128 >> (px & 7)
-        with open(self._path("/splash.bin.new"), "wb") as handle: handle.write(portrait)
-        try: os.rename(self._path("/splash.bin"), self._path("/splash.bin.bak"))
+        with open(self._data_path("/splash.bin.new"), "wb") as handle: handle.write(portrait)
+        try: os.rename(self._data_path("/splash.bin"), self._data_path("/splash.bin.bak"))
         except OSError as problem: debug("ota", "splash backup skipped: %r" % problem)
-        os.rename(self._path("/splash.bin.new"), self._path("/splash.bin"))
+        os.rename(self._data_path("/splash.bin.new"), self._data_path("/splash.bin"))
         info("ota", "splash installed")
 
     @staticmethod
     def revert_splash(root=""):
-        root = root.rstrip("/")
+        root = root.rstrip("/") or DATA_ROOT
         info("ota", "splash revert begin root=%s" % (root or "/"))
         try: os.remove(root + "/splash.bin")
         except OSError as problem: debug("ota", "current splash remove skipped: %r" % problem)
