@@ -1,5 +1,5 @@
 """AP settings API; requires adafruit_httpserver on the device."""
-from xbrut_storage import read_json, write_json
+from xbrut_storage import read_json, sd_available, write_json
 from xbrut_log import LOG_LEVELS, configure, debug, info
 from xbrut_paths import BASE_CONFIG_PATH
 from ap_page import HTML
@@ -21,6 +21,7 @@ def start(platform):
     def get_settings(request):
         debug("ap", "GET /api/settings")
         value = read_json(BASE_CONFIG_PATH, {}) or {}
+        value["storage_available"] = sd_available()
         value.setdefault("log_level", "debug")
         import project
         value["document_urls"] = project.config().get("document_urls", [])
@@ -29,6 +30,8 @@ def start(platform):
     @server.route("/api/settings", methods=[POST])
     def put_settings(request):
         try:
+            if not sd_available():
+                raise RuntimeError("NO_SD_CARD: settings cannot be saved")
             value = request.json()
             debug("ap", "POST /api/settings keys=%s" % ",".join(sorted(value.keys())))
             # Persist only keys owned by the base; project keys can be added later.

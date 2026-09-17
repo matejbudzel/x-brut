@@ -49,6 +49,7 @@ document.querySelector('#add').onclick = () => addUrl('');
 fetch('/api/settings').then(r => r.json()).then(data => {
   Object.keys(data).forEach(key => { if (form[key]) form[key].value = data[key]; });
   (data.document_urls || []).forEach(addUrl); if (!urls.children.length) addUrl('');
+  if (!data.storage_available) { document.querySelector('#status').textContent = 'No SD card: settings and downloads are unavailable.'; form.querySelectorAll('input, select, button').forEach(e => e.disabled = true); }
 });
 form.onsubmit = event => {
   event.preventDefault(); const value = Object.fromEntries(new FormData(form));
