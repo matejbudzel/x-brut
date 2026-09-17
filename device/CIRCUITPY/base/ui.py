@@ -88,9 +88,7 @@ class BaseUI:
         except Exception: return
         cells = 0 if percent < 10 else min(3, (percent + 32) // 33)
         if charging:
-            # Small lightning stroke immediately before the cells.
-            self.frame.pixel(394, 20); self.frame.pixel(398, 20); self.frame.pixel(395, 23)
-            self.frame.pixel(396, 23); self.frame.pixel(393, 27); self.frame.pixel(396, 27)
+            self.frame.text(394, 18, "*>")
         for index in range(3):
             x, y = 414 + index * 20, 18
             self.frame.outline(x, y, 14, 14)
