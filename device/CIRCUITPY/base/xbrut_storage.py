@@ -8,6 +8,10 @@ _sd = None
 _vfs = None
 
 
+class SDCardUnavailable(RuntimeError):
+    pass
+
+
 def _join(root, name):
     return root.rstrip("/") + "/" + name if root.rstrip("/") else "/" + name
 
@@ -63,7 +67,7 @@ def _migrate_legacy_data(legacy_root="/", data_root=DATA_ROOT):
 def mount_sd():
     """Mount the X4 microSD on the SPI bus shared with the board display."""
     global _spi, _sd, _vfs
-    if _spi is not None: return
+    if _spi is not None: return True
     import board, sdcardio, storage
     try: os.mkdir(DATA_ROOT)
     except OSError: pass
@@ -76,16 +80,21 @@ def mount_sd():
         _sd = sdcardio.SDCard(_spi, board.SD_CS)
         _vfs = storage.VfsFat(_sd)
         storage.mount(_vfs, DATA_ROOT)
-    except Exception:
+    except Exception as problem:
         _spi = _sd = _vfs = None
-        print("X Brut: microSD mount failed")
-        raise
+        print("X Brut: microSD unavailable: %r" % problem)
+        return False
     migrated = _migrate_legacy_data()
     try:
         with open(BASE_CONFIG_PATH, "r") as handle: configure(json.load(handle))
     except (OSError, ValueError):
         configure({})
     info("storage", "microSD mounted at %s; migrated=%d" % (DATA_ROOT, migrated))
+    return True
+
+
+def sd_available():
+    return _vfs is not None
 
 
 def shared_spi():
@@ -121,6 +130,8 @@ def read_json(path, default=None):
 
 
 def write_json(path, value):
+    if not sd_available():
+        raise SDCardUnavailable("SD card is required to save settings")
     debug("storage", "write_json begin %s" % path)
     temporary = path + ".new"
     try:

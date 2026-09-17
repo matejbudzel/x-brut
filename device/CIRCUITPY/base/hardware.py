@@ -14,7 +14,31 @@ class X4Platform:
         debug("hardware", "display=%s size=%sx%s" % (type(self.display).__name__, self.display.width, self.display.height))
         self.display.rotation = 270
         debug("hardware", "display rotation=270")
+        self._back_pending = False
+        self._back_long_emitted = False
         self._frame_path = FRAME_PATH
+        self._ram_mode = False
+        try:
+            self._open_file_frame()
+        except OSError as problem:
+            info("hardware", "microSD framebuffer unavailable: %r; using RAM" % problem)
+            self._ram_mode = True
+            self._ram_bitmap = displayio.Bitmap(480, 800, 2)
+            self._ram_bitmap.fill(0)
+            palette = displayio.Palette(2)
+            palette[0], palette[1] = 0xffffff, 0
+            self._group = displayio.Group()
+            self._group.append(displayio.TileGrid(self._ram_bitmap, pixel_shader=palette))
+            self.display.root_group = self._group
+            from adafruit_xteink_x4 import InputManager
+            self.buttons = InputManager()
+            info("hardware", "X4Platform init complete (RAM framebuffer)")
+            return
+        from adafruit_xteink_x4 import InputManager
+        self.buttons = InputManager()
+        info("hardware", "X4Platform init complete")
+
+    def _open_file_frame(self):
         debug("hardware", "opening framebuffer %s" % self._frame_path)
         self._frame = open(self._frame_path, "w+b")
         # 480x800, 1-bit BMP. Rows are 60 bytes and naturally 4-byte aligned.
@@ -32,11 +56,6 @@ class X4Platform:
         self._group.append(displayio.TileGrid(self._bitmap, pixel_shader=self._bitmap.pixel_shader))
         self.display.root_group = self._group
         debug("hardware", "display root_group installed")
-        from adafruit_xteink_x4 import InputManager
-        self.buttons = InputManager()
-        self._back_pending = False
-        self._back_long_emitted = False
-        info("hardware", "X4Platform init complete")
     def _row_offset(self, y):
         # type: (int) -> int
         return 62 + (799 - y) * 60
@@ -46,16 +65,29 @@ class X4Platform:
     def clear(self):
         # type: () -> None
         debug("hardware", "framebuffer clear begin")
+        if self._ram_mode:
+            self._ram_bitmap.fill(0)
+            return
         for y in range(800): self._write_row(y, b"\0" * 60)
         debug("hardware", "framebuffer clear complete")
     def pixel(self, x, y, on=True):
         # type: (int, int, bool) -> None
+        if self._ram_mode:
+            self._ram_bitmap[x, y] = 1 if on else 0
+            return
         offset, mask = self._row_offset(y) + x // 8, 128 >> (x & 7)
         self._frame.seek(offset); value = self._frame.read(1)[0]
         self._frame.seek(offset); self._frame.write(bytes((value | mask if on else value & ~mask,)))
     def present(self, packed):
         # type: (bytes) -> None
         debug("hardware", "present begin bytes=%d" % len(packed))
+        if self._ram_mode:
+            self.clear()
+            for y in range(800):
+                for x in range(480):
+                    self._ram_bitmap[x, y] = 1 if packed[y * 60 + x // 8] & (128 >> (x & 7)) else 0
+            self.refresh()
+            return
         for y in range(800):
             self._write_row(y, packed[y * 60:(y + 1) * 60])
         self.refresh()
@@ -76,7 +108,7 @@ class X4Platform:
     def refresh(self):
         # type: () -> None
         debug("hardware", "refresh begin time_to_refresh=%s busy=%s" % (self.display.time_to_refresh, self.display.busy))
-        self._frame.flush()
+        if not self._ram_mode: self._frame.flush()
         if self.display.time_to_refresh > 0:
             import time
             time.sleep(self.display.time_to_refresh)
@@ -194,8 +226,12 @@ class X4Platform:
         info("hardware", "start AP requested ssid=%s" % conf.get("ap_ssid", "x-brut"))
         if not conf.get("ap_password"):
             alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; conf["ap_password"] = "".join(random.choice(alphabet) for _ in range(12))
-            from xbrut_storage import write_json; write_json(BASE_CONFIG_PATH, conf)
-            debug("hardware", "generated and persisted AP password")
+            from xbrut_storage import SDCardUnavailable, write_json
+            try:
+                write_json(BASE_CONFIG_PATH, conf)
+                debug("hardware", "generated and persisted AP password")
+            except SDCardUnavailable:
+                info("hardware", "generated temporary AP password; no microSD")
         try: wifi.radio.start_ap(conf.get("ap_ssid", "x-brut"), conf["ap_password"])
         except Exception as problem:
             error("hardware", "AP start failed: %r" % problem)

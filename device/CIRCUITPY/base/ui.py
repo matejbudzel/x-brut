@@ -12,6 +12,7 @@ class BaseUI:
         self.lines, self.actions = [], []
         self.title = "xBrut"
         self.bottom_labels, self.side_labels = ("", "", "", ""), ("", "")
+        self.read_only = False
         debug("ui", "BaseUI initialized")
 
     def show(self, page, title, lines=(), actions=(), bottom_labels=("Back", "Open", "v", "v"), side_labels=("v", "v"), focus=0):
@@ -71,7 +72,9 @@ class BaseUI:
         debug("ui", "home requested project=%s" % getattr(project, "PROJECT_NAME", "none"))
         project_label = getattr(project, "HOME_ACTION_LABEL", "") if project else ""
         title = getattr(project, "PROJECT_NAME", "xBrut") if project else "xBrut"
-        self.show("home", title, ["READY"], bottom_labels=("Settings", project_label, "", ""), side_labels=("", ""))
+        lines = ["READY"]
+        if self.read_only: lines.append("NO SD CARD - READ ONLY")
+        self.show("home", title, lines, bottom_labels=("Settings", project_label, "", ""), side_labels=("", ""))
 
     def _label_centered(self, center, y, label, rotated=False):
         if label:
@@ -96,6 +99,7 @@ class BaseUI:
         version = getattr(project, "PROJECT_VERSION", "") if project else ""
         lines = [("Base version: ", BASE_VERSION), ("Project: ", name)]
         if version: lines.append(("Project version: ", version))
+        if self.read_only: lines.append("NO SD CARD - DOWNLOADS DISABLED")
         actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap"), ("DEVICE", "device")]
         if project and hasattr(project, "config"):
             urls = project.config().get("document_urls", [])

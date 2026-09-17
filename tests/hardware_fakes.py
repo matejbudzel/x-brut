@@ -412,6 +412,7 @@ class HardwareEnvironment:
 
         storage.write_json = write_json
         storage.shared_spi = lambda: self.spi
+        storage.SDCardUnavailable = type("SDCardUnavailable", (RuntimeError,), {})
 
         paths = ModuleType("xbrut_paths")
         paths.BASE_CONFIG_PATH = "/sd/base-conf.json"

@@ -1,6 +1,6 @@
 """Device orchestration; a damaged project never prevents the settings UI."""
 import supervisor, time
-from xbrut_storage import read_json
+from xbrut_storage import read_json, sd_available
 from xbrut_log import configure, debug, error as log_error, exception as log_exception, info, safe_url
 from xbrut_paths import BASE_CONFIG_PATH, SPLASH_PATH
 from ui import BaseUI
@@ -35,6 +35,7 @@ def _run():
     platform = X4Platform()
     project = _load_project()
     ui = BaseUI(platform)
+    ui.read_only = not sd_available()
     navigation = Navigation("home")
     splash_loaded = False
     try:
