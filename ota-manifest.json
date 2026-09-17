@@ -11,6 +11,7 @@
     {"path": "base/hardware.py", "url": "device/CIRCUITPY/base/hardware.py"},
     {"path": "base/navigation.py", "url": "device/CIRCUITPY/base/navigation.py"},
     {"path": "base/ota.py", "url": "device/CIRCUITPY/base/ota.py"},
+    {"path": "base/sd_manager.py", "url": "device/CIRCUITPY/base/sd_manager.py"},
     {"path": "base/ui.py", "url": "device/CIRCUITPY/base/ui.py"},
     {"path": "base/xbrut_log.py", "url": "device/CIRCUITPY/base/xbrut_log.py"},
     {"path": "base/xbrut_paths.py", "url": "device/CIRCUITPY/base/xbrut_paths.py"},

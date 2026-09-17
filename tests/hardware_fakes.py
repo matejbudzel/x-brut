@@ -96,6 +96,11 @@ class Group:
         self.layers.append(layer)
 
 
+class BatteryMonitor:
+    """Minimal X4 helper shape used by the hardware adapter."""
+    percentage = 100
+
+
 class InputManager:
     BTN_BACK = 0
     BTN_CONFIRM = 1
@@ -351,6 +356,7 @@ class HardwareEnvironment:
 
         x4 = ModuleType("adafruit_xteink_x4")
         x4.InputManager = InputManager
+        x4.BatteryMonitor = BatteryMonitor
 
         wifi = ModuleType("wifi")
         wifi.radio = self.radio

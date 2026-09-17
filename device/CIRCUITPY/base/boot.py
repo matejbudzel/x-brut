@@ -6,6 +6,7 @@ from xbrut_paths import BASE_CONFIG_PATH, SPLASH_PATH
 from ui import BaseUI
 from ota import OTA
 from navigation import Navigation
+from sd_manager import SDCardError, SDManager
 
 
 def _load_project():
@@ -95,6 +96,9 @@ def _run():
             elif result == "ap":
                 navigation.update(focus=ui.focus); navigation.push("ap")
                 _ap_screen(navigation, ui, platform, project)
+            elif result == "manage_sd":
+                navigation.update(focus=ui.focus); navigation.push("sd_manager")
+                _sd_manager_screen(navigation, ui, platform, project)
             elif result == "soft_reload":
                 info("boot", "Device soft reload requested")
                 supervisor.reload()
@@ -148,6 +152,35 @@ def _leave(navigation, ui, project, button):
         _home(navigation, ui, project)
     else:
         _back(navigation, ui, project)
+
+
+def _sd_unavailable(navigation, ui, project):
+    """Do not attempt an internal-flash fallback after an SD access failure."""
+    info("boot", "SD manager lost microSD; returning to read-only home")
+    ui.read_only = True
+    _home(navigation, ui, project)
+
+
+def _sd_manager_screen(navigation, ui, platform, project):
+    """Run the focused tree manager as a normal navigation route."""
+    try:
+        manager = SDManager("/sd", sd_available)
+        ui.sd_manager(manager)
+        while True:
+            button = platform.button()
+            if button == "left_long":
+                _home(navigation, ui, project)
+                return
+            if button == "left" and not manager.modal:
+                _back(navigation, ui, project)
+                return
+            if button:
+                manager.button(button)
+                ui.sd_manager(manager)
+            time.sleep(0.05)
+    except SDCardError as problem:
+        log_error("boot", "SD manager unavailable: %r" % problem)
+        _sd_unavailable(navigation, ui, project)
 
 
 def _ota_screen(navigation, ui, platform, project):

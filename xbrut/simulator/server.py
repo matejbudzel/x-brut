@@ -7,6 +7,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(ROOT, "device", "CIRCUITPY", "base"))
 sys.path.insert(0, os.path.join(ROOT, "device", "CIRCUITPY"))
 from ui import BaseUI
+from sd_manager import SDCardError, SDManager
 from ap import HTML as AP_HTML
 from ota import OTA
 import xbrut_log
@@ -151,7 +152,13 @@ class Simulator:
 
     def show_settings(self, focus=0):
         status = "simulated" if self.sd_present and not self.sd_reload_required else "none"
+        self.ui.read_only = status == "none"
         self.ui.settings(self.project, focus=focus, sd_status=status)
+
+    def show_sd_manager(self, focus=0):
+        self.settings_focus = focus
+        self.manager = SDManager(SIMULATOR_DATA, lambda: self.sd_present and not self.sd_reload_required)
+        self.ui.sd_manager(self.manager)
 
     def toggle_sd(self):
         self.sd_present = not self.sd_present
@@ -185,6 +192,15 @@ class Simulator:
             # Match the device's universal long-Back gesture. The simulator
             # does not retain the device route stack, but Home is its root.
             self.show_home()
+            return
+        if self.ui.page == "sd_manager":
+            if button == "left" and not self.manager.modal:
+                self.show_settings(self.settings_focus); return
+            try:
+                self.manager.button(button)
+                self.ui.sd_manager(self.manager)
+            except SDCardError:
+                self.show_home()
             return
         if button == "left" and self.ui.page == "home": self.show_settings(); return
         result = self.ui.button(button)
@@ -222,6 +238,9 @@ class Simulator:
             except OSError as error:
                 log("ap start failed: %r" % error)
                 self.ui.show("ap", "AP MODE", ["- AP START FAILED -"], bottom_labels=("Exit", "", "", ""), side_labels=("", ""))
+        elif result == "manage_sd":
+            try: self.show_sd_manager(self.ui.focus)
+            except SDCardError: self.show_home()
         elif result == "download":
             config = read_config()
             try:

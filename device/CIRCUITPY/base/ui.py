@@ -121,7 +121,9 @@ class BaseUI:
             if urls:
                 actions.append((project.PROJECT_NAME, "section"))
                 for index, url in enumerate(urls): actions.append((project.short_url(url), "document:%d" % index))
-        actions.extend([("Device", "section"), ("SOFT RELOAD", "soft_reload"), ("HARD RELOAD", "hard_reload"), ("SLEEP", "sleep")])
+        actions.append(("Device", "section"))
+        if not self.read_only: actions.append(("MANAGE SD CARD", "manage_sd"))
+        actions.extend([("SOFT RELOAD", "soft_reload"), ("HARD RELOAD", "hard_reload"), ("SLEEP", "sleep")])
         if sd_status: lines.append(("SD Card: ", sd_status))
         selected = actions[focus][1] if 0 <= focus < len(actions) else ""
         verb = "Do" if selected in ("soft_reload", "hard_reload", "sleep") else "Open"
@@ -148,3 +150,29 @@ class BaseUI:
             self.page, self.title, self.lines, self.actions,
             self.bottom_labels, self.side_labels, self.focus,
         )
+
+    def sd_manager(self, manager):
+        """Render the compact scrollable SD tree without generic action rows."""
+        self.page, self.title = "sd_manager", "SD CARD"
+        self.frame.clear(); self.frame.text(CONTENT_X, 22, self.title, 2)
+        rows, focus, visible = manager.rows, manager.focus, 21
+        start = max(0, min(focus - visible // 2, max(0, len(rows) - visible)))
+        for offset, row in enumerate(rows[start:start + visible]):
+            y, index = 82 + offset * 28, start + offset
+            if index == focus and row.get("focusable"):
+                self.frame.outline(CONTENT_X, y - 5, 480 - CONTENT_X - 12, 26)
+            self.frame.text(CONTENT_X + 4, y, row["text"][:54], 1)
+        if len(rows) > visible:
+            height = max(12, visible * 28 * visible // len(rows))
+            top = 82 + (visible * 28 - height) * start // max(1, len(rows) - visible)
+            self.frame.rect(468, top, 5, height)
+        if manager.modal:
+            selected = manager.selected()
+            self.frame.rect(30, 315, 420, 150, False); self.frame.outline(30, 315, 420, 150)
+            self.frame.text(52, 340, "DELETE?", 2)
+            self.frame.text(52, 385, (selected or {}).get("text", "")[:45])
+            self.frame.text(52, 420, "BACK CANCELS / DELETE CONFIRMS")
+            self.bottom_labels, self.side_labels = ("Back", "Delete", "", ""), ("", "")
+        else:
+            self.bottom_labels, self.side_labels = ("Back", "Delete", "v", "v"), ("", "")
+        self._battery(); self._labels(); self.platform.refresh()
