@@ -9,6 +9,7 @@
     {"path": "base/boot.py", "url": "device/CIRCUITPY/base/boot.py"},
     {"path": "base/framebuffer.py", "url": "device/CIRCUITPY/base/framebuffer.py"},
     {"path": "base/hardware.py", "url": "device/CIRCUITPY/base/hardware.py"},
+    {"path": "base/navigation.py", "url": "device/CIRCUITPY/base/navigation.py"},
     {"path": "base/ota.py", "url": "device/CIRCUITPY/base/ota.py"},
     {"path": "base/ui.py", "url": "device/CIRCUITPY/base/ui.py"},
     {"path": "base/xbrut_log.py", "url": "device/CIRCUITPY/base/xbrut_log.py"},

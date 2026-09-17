@@ -5,6 +5,7 @@ from xbrut_log import configure, debug, error as log_error, exception as log_exc
 from xbrut_paths import BASE_CONFIG_PATH, SPLASH_PATH
 from ui import BaseUI
 from ota import OTA
+from navigation import Navigation
 
 
 def _load_project():
@@ -34,6 +35,7 @@ def _run():
     platform = X4Platform()
     project = _load_project()
     ui = BaseUI(platform)
+    navigation = Navigation("home")
     splash_loaded = False
     try:
         debug("boot", "loading cached splash")
@@ -72,15 +74,26 @@ def _run():
                 raise
         elif button == "left":
             debug("boot", "left action page=%s" % ui.page)
-            if ui.page == "home": ui.settings(project)
-            else: ui.home(project)
+            if navigation.route == "home":
+                navigation.push("settings", {"focus": 0})
+                ui.settings(project)
+            else:
+                _back(navigation, ui, project)
         elif ui.page == "settings" and button:
             result = ui.button(button)
             debug("boot", "settings result=%s" % result)
-            if result == "ota": _ota_screen(ui, platform)
-            elif result == "splash": _splash_screen(ui, platform)
-            elif result == "ap": _ap_screen(ui, platform)
-            elif result and result.startswith("document:"): _document_screen(ui, platform, project, int(result.split(":", 1)[1]))
+            if result == "ota":
+                navigation.update(focus=ui.focus); navigation.push("ota")
+                _ota_screen(navigation, ui, platform, project)
+            elif result == "splash":
+                navigation.update(focus=ui.focus); navigation.push("splash")
+                _splash_screen(navigation, ui, platform, project)
+            elif result == "ap":
+                navigation.update(focus=ui.focus); navigation.push("ap")
+                _ap_screen(navigation, ui, platform, project)
+            elif result and result.startswith("document:"):
+                navigation.update(focus=ui.focus); navigation.push("document", {"index": int(result.split(":", 1)[1])})
+                _document_screen(navigation, ui, platform, project, navigation.state["index"])
         time.sleep(0.05)
 
 
@@ -91,7 +104,18 @@ def run():
         raise
 
 
-def _ota_screen(ui, platform):
+def _back(navigation, ui, project):
+    """Apply the one universal Back policy and restore parent route state."""
+    entry = navigation.back()
+    if entry is None:
+        return
+    if entry["route"] == "settings":
+        ui.settings(project, focus=entry["state"].get("focus", 0))
+    else:
+        ui.home(project)
+
+
+def _ota_screen(navigation, ui, platform, project):
     info("boot", "OTA screen enter")
     back_only = ("Back", "", "", "")
     start_download = ("Back", "Start", "", "")
@@ -101,7 +125,7 @@ def _ota_screen(ui, platform):
         info("boot", "OTA unavailable: no manifest URL")
         ui.show("ota", "OTA", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=back_only, side_labels=no_sides)
         while platform.button() != "left": time.sleep(0.05)
-        ui.settings(_load_project())
+        _back(navigation, ui, project)
         return
     ui.show("ota", "OTA", ["- FETCHING MANIFEST -"], bottom_labels=back_only, side_labels=no_sides)
     try:
@@ -116,7 +140,7 @@ def _ota_screen(ui, platform):
             if button == "left":
                 info("boot", "OTA screen exit before download")
                 platform.disconnect()
-                ui.settings(_load_project())
+                _back(navigation, ui, project)
                 return
             if button in ("confirm", "button_2") and can_download:
                 try:
@@ -137,11 +161,11 @@ def _ota_screen(ui, platform):
         if platform.button() == "left": break
         time.sleep(0.05)
     platform.disconnect()
-    ui.settings(_load_project())
+    _back(navigation, ui, project)
     info("boot", "OTA screen exit")
 
 
-def _splash_screen(ui, platform):
+def _splash_screen(navigation, ui, platform, project):
     info("boot", "splash update screen enter")
     back_only, start = ("Back", "", "", ""), ("Back", "Start", "", "")
     conf = read_json(BASE_CONFIG_PATH, {}) or {}
@@ -149,7 +173,7 @@ def _splash_screen(ui, platform):
         info("boot", "splash update unavailable: no URL")
         ui.show("splash_update", "SPLASH SCREEN", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=back_only, side_labels=("", ""))
         while platform.button() != "left": time.sleep(0.05)
-        ui.settings(_load_project(), focus=1)
+        _back(navigation, ui, project)
         return
     ui.show("splash_update", "SPLASH SCREEN", ["- FETCHING -"], bottom_labels=back_only, side_labels=("", ""))
     try:
@@ -161,7 +185,7 @@ def _splash_screen(ui, platform):
             button = platform.button()
             if button == "left":
                 info("boot", "splash update exit")
-                platform.disconnect(); ui.settings(_load_project(), focus=1); return
+                platform.disconnect(); _back(navigation, ui, project); return
             if button in ("confirm", "button_2") and ready:
                 try:
                     info("boot", "splash download requested")
@@ -192,10 +216,10 @@ def _splash_screen(ui, platform):
     except Exception as problem:
         log_error("boot", "splash manifest failed: %r" % problem); ui.show("splash_update", "SPLASH SCREEN", ["- FETCH FAILED -"], bottom_labels=back_only, side_labels=("", ""))
     while platform.button() != "left": time.sleep(0.05)
-    platform.disconnect(); ui.settings(_load_project(), focus=1)
+    platform.disconnect(); _back(navigation, ui, project)
     info("boot", "splash update screen exit")
 
-def _ap_screen(ui, platform):
+def _ap_screen(navigation, ui, platform, project):
     info("boot", "AP screen enter")
     from ap import start
     conf, server = start(platform)
@@ -210,17 +234,17 @@ def _ap_screen(ui, platform):
         if platform.button() == "left": break
         time.sleep(0.02)
     platform.disconnect()
-    ui.settings(_load_project(), focus=2)
+    _back(navigation, ui, project)
     info("boot", "AP screen exit")
 
 
-def _document_screen(ui, platform, project, index):
+def _document_screen(navigation, ui, platform, project, index):
     url = project.config()["document_urls"][index]
     info("boot", "document screen enter index=%d url=%s" % (index, safe_url(url)))
     ui.show("document", "DOWNLOAD", ["DOWNLOAD", project.short_url(url)], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
     while True:
         button = platform.button()
-        if button == "left": info("boot", "document screen exit"); ui.settings(project); return
+        if button == "left": info("boot", "document screen exit"); _back(navigation, ui, project); return
         if button in ("confirm", "button_2"):
             try:
                 info("boot", "document download begin index=%d" % index)
