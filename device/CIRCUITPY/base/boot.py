@@ -94,6 +94,9 @@ def _run():
             elif result == "ap":
                 navigation.update(focus=ui.focus); navigation.push("ap")
                 _ap_screen(navigation, ui, platform, project)
+            elif result == "device":
+                navigation.update(focus=ui.focus); navigation.push("device")
+                _device_screen(navigation, ui, platform, project)
             elif result and result.startswith("document:"):
                 navigation.update(focus=ui.focus); navigation.push("document", {"index": int(result.split(":", 1)[1])})
                 _document_screen(navigation, ui, platform, project, navigation.state["index"])
@@ -270,6 +273,33 @@ def _ap_screen(navigation, ui, platform, project):
     platform.disconnect()
     _leave(navigation, ui, project, button)
     info("boot", "AP screen exit")
+
+
+def _device_screen(navigation, ui, platform, project):
+    """Run explicitly requested lifecycle actions from the Device page."""
+    from xbrut_storage import sd_card_status
+    info("boot", "Device screen enter")
+    ui.device(sd_card_status())
+    while True:
+        button = platform.button()
+        if button in ("left", "left_long"):
+            _leave(navigation, ui, project, button)
+            return
+        if button:
+            result = ui.button(button)
+            if result == "soft_reload":
+                info("boot", "Device soft reload requested")
+                supervisor.reload()
+            elif result == "hard_reload":
+                info("boot", "Device hard reload requested")
+                import microcontroller
+                microcontroller.reset()
+            elif result == "sleep":
+                info("boot", "Device sleep requested")
+                ui.splash(getattr(project, "PROJECT_NAME", ""))
+                platform.sleep()
+                ui.device(sd_card_status())
+        time.sleep(0.05)
 
 
 def _document_screen(navigation, ui, platform, project, index):

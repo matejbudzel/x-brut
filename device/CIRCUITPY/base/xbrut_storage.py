@@ -94,6 +94,20 @@ def shared_spi():
     return _spi
 
 
+def sd_card_status():
+    """Return a compact capacity summary for the on-device Device page."""
+    if _vfs is None:
+        return "none"
+    try:
+        values = os.statvfs(DATA_ROOT)
+        total = values[0] * values[2]
+        used = total - values[0] * values[3]
+        gigabyte = 1024 * 1024 * 1024
+        return "%.1f/%.1f GB" % (used / gigabyte, total / gigabyte)
+    except OSError:
+        return "mounted"
+
+
 def read_json(path, default=None):
     debug("storage", "read_json %s" % path)
     try:

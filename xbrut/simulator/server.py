@@ -176,6 +176,16 @@ class Simulator:
             elif self.ui.page == "splash_update": self.ui.settings(self.project, focus=1)
             else: self.show_home()
             return
+        if result == "device":
+            self.ui.device("simulated")
+            return
+        if result in ("soft_reload", "hard_reload"):
+            self.show_home()
+            return
+        if result == "sleep":
+            self.powered = False
+            self.ui.splash(self.project_name)
+            return
         if result == "ota":
             if read_config().get("manifest_url"):
                 self.ui.show("ota", "OTA", ["UPDATE AVAILABLE"], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))

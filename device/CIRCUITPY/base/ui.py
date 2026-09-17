@@ -96,13 +96,21 @@ class BaseUI:
         version = getattr(project, "PROJECT_VERSION", "") if project else ""
         lines = [("Base version: ", BASE_VERSION), ("Project: ", name)]
         if version: lines.append(("Project version: ", version))
-        actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap")]
+        actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap"), ("DEVICE", "device")]
         if project and hasattr(project, "config"):
             urls = project.config().get("document_urls", [])
             if urls:
                 actions.append((project.PROJECT_NAME, "section"))
                 for index, url in enumerate(urls): actions.append((project.short_url(url), "document:%d" % index))
         self.show("settings", "SETTINGS", lines, actions, focus=focus)
+
+    def device(self, sd_status, focus=0):
+        """Controls which affect this boot rather than persistent settings."""
+        self.show(
+            "device", "DEVICE", [("SD Card: ", sd_status)],
+            [("SOFT RELOAD", "soft_reload"), ("HARD RELOAD", "hard_reload"), ("SLEEP", "sleep")],
+            bottom_labels=("Back", "Run", "", ""), side_labels=("", ""), focus=focus,
+        )
 
     def button(self, name):
         debug("ui", "button name=%s page=%s focus=%d" % (name, self.page, self.focus))
