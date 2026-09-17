@@ -44,7 +44,7 @@ class BaseUI:
             if index == self.focus: self.frame.outline(CONTENT_X, y - 5, 480 - CONTENT_X, 26); self.frame.text(CONTENT_X + 4, y, action[0], 1)
             else: self.frame.text(CONTENT_X + 4, y, action[0], 1)
             y += 28
-        self._labels(); self.platform.refresh()
+        self._battery(); self._labels(); self.platform.refresh()
         debug("ui", "show complete page=%s" % page)
 
     def splash(self, project_name=""):
@@ -81,6 +81,21 @@ class BaseUI:
             if rotated: self.frame.text_rotated_180(x + (len(label) - 1) * 8, y, label)
             else: self.frame.text(x, y, label)
 
+    def _battery(self):
+        """Three-cell indicator; <10% intentionally renders as empty."""
+        if not hasattr(self.platform, "battery_status"): return
+        try: percent, charging = self.platform.battery_status()
+        except Exception: return
+        cells = 0 if percent < 10 else min(3, (percent + 32) // 33)
+        if charging:
+            # Small lightning stroke immediately before the cells.
+            self.frame.pixel(394, 20); self.frame.pixel(398, 20); self.frame.pixel(395, 23)
+            self.frame.pixel(396, 23); self.frame.pixel(393, 27); self.frame.pixel(396, 27)
+        for index in range(3):
+            x, y = 414 + index * 20, 18
+            self.frame.outline(x, y, 14, 14)
+            if index < cells: self.frame.rect(x + 3, y + 3, 8, 8)
+
     def _labels(self):
         """Place legends in the X4's four footer zones and two side zones."""
         for index, label in enumerate(self.bottom_labels):
@@ -99,6 +114,9 @@ class BaseUI:
         lines = [("Base version: ", BASE_VERSION), ("Project: ", name)]
         if version: lines.append(("Project version: ", version))
         if self.read_only: lines.append("NO SD CARD - DOWNLOADS DISABLED")
+        if hasattr(self.platform, "battery_status"):
+            try: lines.append(("Battery: ", "%d%%" % self.platform.battery_status()[0]))
+            except Exception: pass
         actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap")]
         if project and hasattr(project, "config"):
             urls = project.config().get("document_urls", [])

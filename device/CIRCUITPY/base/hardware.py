@@ -32,10 +32,14 @@ class X4Platform:
             self.display.root_group = self._group
             from adafruit_xteink_x4 import InputManager
             self.buttons = InputManager()
+            from adafruit_xteink_x4 import BatteryMonitor
+            self.battery = BatteryMonitor()
             info("hardware", "X4Platform init complete (RAM framebuffer)")
             return
         from adafruit_xteink_x4 import InputManager
         self.buttons = InputManager()
+        from adafruit_xteink_x4 import BatteryMonitor
+        self.battery = BatteryMonitor()
         info("hardware", "X4Platform init complete")
 
     def _open_file_frame(self):
@@ -153,6 +157,9 @@ class X4Platform:
                 translated = {"back": "left", "left": "left", "right": "button_4", "power_button": "power"}.get(name, name)
                 debug("hardware", "button index=%d raw=%s translated=%s" % (index, name, translated))
                 return translated
+    def battery_status(self):
+        import supervisor
+        return self.battery.percentage, supervisor.runtime.usb_connected
     def sleep(self):
         # type: () -> None
         import alarm, time

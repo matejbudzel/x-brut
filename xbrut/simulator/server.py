@@ -95,7 +95,8 @@ class Bitmap:
 
 
 class Platform:
-    def __init__(self): self.bitmap = Bitmap(); self.frame = bytes(48000); self.wifi = False
+    def __init__(self): self.bitmap = Bitmap(); self.frame = bytes(48000); self.wifi = False; self.battery_percent = 100; self.charging = False
+    def battery_status(self): return self.battery_percent, self.charging
     def clear(self): self.bitmap.fill(0)
     def pixel(self, x, y, on=True): self.bitmap[x, y] = 1 if on else 0
     def present(self, packed):
@@ -256,6 +257,10 @@ def handler(sim):
             if self.path == "/api/status": return self.send_json({"page": sim.ui.page, "focus": sim.ui.focus, "powered": sim.powered})
             return super().do_GET()
         def do_POST(self):
+            if self.path == "/api/battery":
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                sim.platform.battery_percent = int(data.get("percent", 100)); sim.platform.charging = bool(data.get("charging", False)); sim.show_home()
+                return self.send_json({"ok": True})
             if self.path == "/api/sd":
                 sim.toggle_sd(); return self.send_json({"present": sim.sd_present, "reload_required": sim.sd_reload_required})
             if self.path != "/api/button": self.send_error(404); return

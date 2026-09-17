@@ -6,7 +6,7 @@ body{margin:0;background:#d6d1c7;color:#171513;font:15px ui-monospace,monospace;
 </style>
 <h1>X BRUT / XTEINK X4 SIMULATOR</h1>
 <div id=device><canvas width=480 height=800></canvas><div class=buttons><button data-b=left>BACK / SETTINGS</button><button data-b=confirm>OK</button><button data-b=up>▲</button><button data-b=down>▼</button><button data-b=power>POWER</button><button id=sd>SD: ON</button></div></div>
-<p class=hint>The canvas is the device’s raw portrait 480×800 one-bit framebuffer, scaled only by CSS. Hold BACK / SETTINGS for 0.8 seconds to return Home.</p>
+<p class=hint>The canvas is the device’s raw portrait 480×800 one-bit framebuffer, scaled only by CSS. Hold BACK / SETTINGS for 0.8 seconds to return Home. Battery: <select id=battery><option>5</option><option>25</option><option>50</option><option>75</option><option selected>100</option></select>% <label><input id=charging type=checkbox> charging</label></p>
 <script>
 let c=document.querySelector('canvas'),x=c.getContext('2d'),im=x.createImageData(480,800);
 async function draw(){let b=new Uint8Array(await (await fetch('/api/screen')).arrayBuffer()),d=im.data;for(let y=0;y<800;y++)for(let q=0;q<60;q++)for(let bit=0;bit<8;bit++){let on=b[y*60+q]&(128>>bit),i=(y*480+q*8+bit)*4,v=on?0:247;d[i]=d[i+1]=d[i+2]=v;d[i+3]=255}x.putImageData(im,0,0)}
@@ -18,5 +18,6 @@ back.addEventListener('pointerup',finishBack);back.addEventListener('pointercanc
 back.onclick=event=>{if(suppressBackClick){suppressBackClick=false;event.preventDefault();return}button('left')};
 document.querySelectorAll('button[data-b]:not([data-b=left])').forEach(e=>e.onclick=()=>button(e.dataset.b));draw()
 document.querySelector('#sd').onclick=async event=>{let state=await (await fetch('/api/sd',{method:'POST'})).json();event.target.textContent='SD: '+(state.present?'ON':'OFF');draw()};
+async function battery(){await fetch('/api/battery',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({percent:+document.querySelector('#battery').value,charging:document.querySelector('#charging').checked})});draw()}document.querySelector('#battery').onchange=battery;document.querySelector('#charging').onchange=battery;
 let revision;async function hot(){try{let next=(await (await fetch('/api/reload',{cache:'no-store'})).json()).revision;if(revision&&revision!==next)location.reload();revision=next}catch(e){}}hot();setInterval(hot,800)
 </script>

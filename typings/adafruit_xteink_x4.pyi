@@ -3,6 +3,12 @@
 import microcontroller
 
 
+class BatteryMonitor:
+    def __init__(self, adc_pin: microcontroller.Pin | None = None, divider_multiplier: float = 2.0) -> None: ...
+    @property
+    def percentage(self) -> int: ...
+
+
 class InputManager:
     BTN_BACK: int
     BTN_CONFIRM: int
