@@ -123,7 +123,9 @@ class BaseUI:
                 for index, url in enumerate(urls): actions.append((project.short_url(url), "document:%d" % index))
         actions.extend([("Device", "section"), ("SOFT RELOAD", "soft_reload"), ("HARD RELOAD", "hard_reload"), ("SLEEP", "sleep")])
         if sd_status: lines.append(("SD Card: ", sd_status))
-        self.show("settings", "SETTINGS", lines, actions, focus=focus)
+        selected = actions[focus][1] if 0 <= focus < len(actions) else ""
+        verb = "Do" if selected in ("soft_reload", "hard_reload", "sleep") else "Open"
+        self.show("settings", "SETTINGS", lines, actions, bottom_labels=("Back", verb, "v", "v"), focus=focus)
 
     def button(self, name):
         debug("ui", "button name=%s page=%s focus=%d" % (name, self.page, self.focus))
@@ -138,6 +140,10 @@ class BaseUI:
             result = self.actions[self.focus][1]
             info("ui", "button action=%s" % result)
             return result
+        if self.page == "settings":
+            selected = self.actions[self.focus][1] if self.actions else ""
+            verb = "Do" if selected in ("soft_reload", "hard_reload", "sleep") else "Open"
+            self.bottom_labels = ("Back", verb, "v", "v")
         self.show(
             self.page, self.title, self.lines, self.actions,
             self.bottom_labels, self.side_labels, self.focus,
