@@ -72,8 +72,7 @@ class BaseUI:
         debug("ui", "home requested project=%s" % getattr(project, "PROJECT_NAME", "none"))
         project_label = getattr(project, "HOME_ACTION_LABEL", "") if project else ""
         title = getattr(project, "PROJECT_NAME", "xBrut") if project else "xBrut"
-        lines = ["READY"]
-        if self.read_only: lines.append("NO SD CARD - READ ONLY")
+        lines = ["NO SD CARD - READ ONLY"] if self.read_only else ["READY"]
         self.show("home", title, lines, bottom_labels=("Settings", project_label, "", ""), side_labels=("", ""))
 
     def _label_centered(self, center, y, label, rotated=False):
