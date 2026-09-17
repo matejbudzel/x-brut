@@ -15,10 +15,10 @@ usage() {
   cat <<'EOF'
 Usage: tools/install-x4.sh --yes [--port /dev/ttyACM0] [--firmware-url URL] [--force-flash]
 
-When CircuitPython is already running, this replaces only the X Brut app and
-its libraries over serial. Otherwise it backs up the whole 16 MiB X4 flash,
-erases it, and flashes official CircuitPython. --force-flash always takes the
-full backup-and-flash path. --yes is required because app files may be erased.
+This replaces only the X Brut app and its libraries over serial when
+CircuitPython is already running. It refuses to flash firmware otherwise.
+--force-flash is required for the backup, erase, and official-firmware path.
+--yes is required because managed app files may be erased.
 EOF
 }
 
@@ -73,10 +73,13 @@ STAGE="$(mktemp -d)"
 cleanup() { rm -rf "$STAGE"; }
 trap cleanup EXIT
 
+CIRCUITPYTHON=0
+if "$TOOLS/bin/python" "$ROOT/tools/serial-upload.py" --port "$PORT" --check-circuitpython >/dev/null 2>&1; then
+  CIRCUITPYTHON=1
+fi
+
 FLASHED=0
-if (( ! FORCE_FLASH )) && "$TOOLS/bin/python" "$ROOT/tools/serial-upload.py" --port "$PORT" --check-circuitpython >/dev/null 2>&1; then
-  echo "CircuitPython detected; replacing only X Brut files and libraries."
-else
+if (( FORCE_FLASH )); then
   mkdir -p "$BACKUPS"
   STAMP="$(date +%Y%m%d-%H%M%S)"
   BACKUP="$BACKUPS/x4-crosspoint-$STAMP.bin"
@@ -91,6 +94,12 @@ else
   "$TOOLS/bin/python" -m esptool --chip esp32c3 --port "$PORT" write-flash 0x0 "$FIRMWARE"
   sleep 4
   FLASHED=1
+elif (( CIRCUITPYTHON )); then
+  echo "CircuitPython detected; replacing only X Brut files and libraries."
+else
+  echo "No responsive CircuitPython REPL found; refusing to flash firmware without --force-flash." >&2
+  echo "See docs/xteink-x4-custom-circuitpython.md for the required X4 SD-card firmware patch." >&2
+  exit 1
 fi
 
 # circup resolves transitive bundle dependencies into a host staging directory.

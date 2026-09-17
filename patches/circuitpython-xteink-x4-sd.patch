@@ -1,0 +1,64 @@
+From 0dedbf744a Mon Sep 17 00:00:00 2001
+Subject: [PATCH] xteink_x4: share display SPI with microSD
+
+Required by X Brut on the Xteink X4. The e-paper display and microSD socket
+share SPI. GPIO12 is the SD chip select even though it is SPIHD on ESP32-C3;
+in the board's DIO flash configuration it is unused by flash.
+
+Applies to CircuitPython commit 0dedbf744a (10.4.0-alpha.2).
+
+diff --git a/ports/espressif/boards/xteink_x4/board.c b/ports/espressif/boards/xteink_x4/board.c
+index b5b193c65f..2013ef910e 100644
+--- a/ports/espressif/boards/xteink_x4/board.c
++++ b/ports/espressif/boards/xteink_x4/board.c
+@@ -8,6 +8,7 @@
+ #include "supervisor/board.h"
+ 
+ #include "mpconfigboard.h"
++#include "shared-bindings/board/__init__.h"
+ #include "shared-bindings/busio/SPI.h"
+ #include "shared-bindings/fourwire/FourWire.h"
+ #include "shared-bindings/microcontroller/Pin.h"
+@@ -71,8 +72,10 @@ const uint8_t ssd1677_display_refresh_sequence[] = {
+ 
+ void board_init(void) {
+     fourwire_fourwire_obj_t *bus = &allocate_display_bus()->fourwire_bus;
+-    busio_spi_obj_t *spi = &bus->inline_bus;
+-    common_hal_busio_spi_construct(spi, &pin_GPIO8, &pin_GPIO10, NULL, false);
++    // The e-paper display and microSD card share this bus. Use the board SPI
++    // singleton so board.SPI() gives SDCard the already-configured bus instead
++    // of attempting to claim the display pins a second time.
++    busio_spi_obj_t *spi = common_hal_board_create_spi(0);
+     common_hal_busio_spi_never_reset(spi);
+ 
+     bus->base.type = &fourwire_fourwire_type;
+diff --git a/ports/espressif/boards/xteink_x4/mpconfigboard.h b/ports/espressif/boards/xteink_x4/mpconfigboard.h
+index 5d4bb37222..69047a0228 100644
+--- a/ports/espressif/boards/xteink_x4/mpconfigboard.h
++++ b/ports/espressif/boards/xteink_x4/mpconfigboard.h
+@@ -11,6 +11,11 @@
+ #define MICROPY_HW_BOARD_NAME       "Xteink X4"
+ #define MICROPY_HW_MCU_NAME         "ESP32-C3"
+ 
++// The X4 uses GPIO12 (the unused SPIHD signal in DIO flash mode) as the
++// microSD chip-select line. Keep the generic ESP32-C3 flash-pin protection
++// for all other boards and pins.
++#define CIRCUITPY_ESP32C3_ALLOW_FLASH_SPIHD 1
++
+ #define CIRCUITPY_BOARD_SPI         (1)
+ #define CIRCUITPY_BOARD_SPI_PIN     {{.clock = &pin_GPIO8, .mosi = &pin_GPIO10, .miso = &pin_GPIO7}}
+ 
+diff --git a/ports/espressif/common-hal/microcontroller/Pin.c b/ports/espressif/common-hal/microcontroller/Pin.c
+index 0c49318f4b..ecef897a78 100644
+--- a/ports/espressif/common-hal/microcontroller/Pin.c
++++ b/ports/espressif/common-hal/microcontroller/Pin.c
+@@ -118,7 +118,9 @@ static const uint64_t pin_mask_reset_forbidden =
+     #if defined(CONFIG_IDF_TARGET_ESP32C3)
+     // Never ever reset pins used to communicate with SPI flash.
+     GPIO_SEL_11 |         // VDD_SPI
++    #if !defined(CIRCUITPY_ESP32C3_ALLOW_FLASH_SPIHD)
+     GPIO_SEL_12 |         // SPIHD
++    #endif
+     GPIO_SEL_13 |         // SPIWP
+     GPIO_SEL_14 |         // SPICS0
+     GPIO_SEL_15 |         // SPICLK

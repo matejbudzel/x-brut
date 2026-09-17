@@ -57,7 +57,7 @@ the final layer before deployment.
    Wi-Fi and the manifest URL (and optionally a `splash_url`). The system assigns
    the AP address (normally `192.168.4.1` on ESP32).
 
-### One-command first install (Debian)
+### App-only deployment (Debian)
 
 Plug in the X4 over USB, then run:
 
@@ -65,15 +65,19 @@ Plug in the X4 over USB, then run:
 tools/install-x4.sh --yes
 ```
 
-The script auto-detects its USB JTAG serial port (or accept `--port
+The script auto-detects its USB JTAG serial port (or accepts `--port
 /dev/ttyACM0`), installs missing host prerequisites with `apt`, creates an
 isolated `.tools/` environment for `esptool`, `pyserial`, and `circup`,
 checks for CircuitPython on the X4 first. When found, it replaces only the
 managed X Brut application files and libraries over the serial REPL, retaining
-CircuitPython and device configuration. Otherwise it downloads the official X4
-CircuitPython binary and saves a complete 16 MiB backup under `backups/`
-**before** erasing Crosspoint. Pass `--force-flash` to explicitly take that
-backup-and-reflash path. This board does not provide a CIRCUITPY USB drive.
+CircuitPython and device configuration. If CircuitPython is absent or
+unresponsive, it refuses to flash firmware. `--force-flash` is required for
+the backup, erase, and official-firmware path. This board does not provide a
+CIRCUITPY USB drive.
+
+X Brut currently relies on a board-specific CircuitPython SD-card patch. See
+[the custom X4 CircuitPython guide](docs/xteink-x4-custom-circuitpython.md)
+before building or flashing firmware.
 
 Internal flash contains application code and libraries. All X Brut mutable data
 lives under `/sd`: `base-conf.json`, `project-conf.json`, logs, downloaded
