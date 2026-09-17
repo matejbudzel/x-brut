@@ -105,11 +105,28 @@ class X4PlatformTest(unittest.TestCase):
         self.assertEqual(self.frame_path.read_bytes()[self.platform._row_offset(0)], 0x80)
 
     def test_button_names_are_translated_to_application_controls(self):
-        expected = ("left", "confirm", "left", "button_4", "up", "down", "power")
+        expected = (None, "confirm", "left", "button_4", "up", "down", "power")
         for index, name in enumerate(expected):
             with self.subTest(index=index):
                 self.platform.buttons.pressed_index = index
                 self.assertEqual(self.platform.button(), name)
+                self.platform.buttons.pressed_index = None
+                self.platform.button()
+        self.platform.buttons.pressed_index = None
+        self.assertIsNone(self.platform.button())
+
+    def test_back_short_press_is_emitted_only_on_release(self):
+        self.platform.buttons.pressed_index = InputManager.BTN_BACK
+        self.assertIsNone(self.platform.button())
+        self.platform.buttons.pressed_index = None
+        self.assertEqual(self.platform.button(), "left")
+
+    def test_back_long_press_is_emitted_once_and_suppresses_short_press(self):
+        self.platform.buttons.pressed_index = InputManager.BTN_BACK
+        self.assertIsNone(self.platform.button())
+        self.platform.buttons.held_seconds = 0.8
+        self.assertEqual(self.platform.button(), "left_long")
+        self.assertIsNone(self.platform.button())
         self.platform.buttons.pressed_index = None
         self.assertIsNone(self.platform.button())
 

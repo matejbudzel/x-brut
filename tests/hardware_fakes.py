@@ -97,7 +97,18 @@ class Group:
 
 
 class InputManager:
-    __slots__ = ("pressed_index", "power_held", "deinitialized", "update_count")
+    BTN_BACK = 0
+    BTN_CONFIRM = 1
+    BTN_LEFT = 2
+    BTN_RIGHT = 3
+    BTN_UP = 4
+    BTN_DOWN = 5
+    BTN_POWER = 6
+
+    __slots__ = (
+        "pressed_index", "power_held", "deinitialized", "update_count",
+        "_current_index", "_pressed_event", "_released_event", "held_seconds",
+    )
 
     instances = []
 
@@ -111,11 +122,29 @@ class InputManager:
         self.power_held = False
         self.deinitialized = False
         self.update_count = 0
+        self._current_index = None
+        self._pressed_event = None
+        self._released_event = None
+        self.held_seconds = 0.0
         type(self).instances.append(self)
 
     @property
     def any_pressed(self):
-        return self.pressed_index is not None
+        return self._pressed_event is not None
+
+    @property
+    def any_released(self):
+        return self._released_event is not None
+
+    @property
+    def current_state(self):
+        if self._current_index is None:
+            return 0
+        return 1 << self._current_index
+
+    @property
+    def held_time(self):
+        return self.held_seconds
 
     @property
     def power_button_pressed(self):
@@ -123,6 +152,10 @@ class InputManager:
 
     def update(self):
         self.update_count += 1
+        current = 6 if self.power_held else self.pressed_index
+        self._pressed_event = current if current != self._current_index and current is not None else None
+        self._released_event = self._current_index if current != self._current_index and self._current_index is not None else None
+        self._current_index = current
 
     def deinit(self):
         self.deinitialized = True
@@ -130,7 +163,17 @@ class InputManager:
     def was_pressed(self, button_index):
         if not isinstance(button_index, int):
             raise TypeError("button index must be int")
-        return self.pressed_index == button_index
+        return self._pressed_event == button_index
+
+    def was_released(self, button_index):
+        if not isinstance(button_index, int):
+            raise TypeError("button index must be int")
+        return self._released_event == button_index
+
+    def is_pressed(self, button_index):
+        if not isinstance(button_index, int):
+            raise TypeError("button index must be int")
+        return self._current_index == button_index
 
     @staticmethod
     def button_name(button_index):

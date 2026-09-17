@@ -3,6 +3,9 @@ import board, displayio
 from xbrut_log import debug, error, info, safe_url
 from xbrut_paths import BASE_CONFIG_PATH, FRAME_PATH
 
+BACK_LONG_PRESS_SECONDS = 0.8
+
+
 class X4Platform:
     def __init__(self):
         # type: () -> None
@@ -31,6 +34,8 @@ class X4Platform:
         debug("hardware", "display root_group installed")
         from adafruit_xteink_x4 import InputManager
         self.buttons = InputManager()
+        self._back_pending = False
+        self._back_long_emitted = False
         info("hardware", "X4Platform init complete")
     def _row_offset(self, y):
         # type: (int) -> int
@@ -82,10 +87,32 @@ class X4Platform:
         debug("hardware", "refresh complete")
     def button(self):
         self.buttons.update()
+        # Defer the physical Back key until it is released. This lets a hold
+        # mean "go home" without first applying a regular history Back.
+        if self._back_pending:
+            if self.buttons.is_pressed(self.buttons.BTN_BACK):
+                if not self._back_long_emitted and self.buttons.held_time >= BACK_LONG_PRESS_SECONDS:
+                    self._back_long_emitted = True
+                    info("hardware", "back long press seconds=%.2f" % self.buttons.held_time)
+                    return "left_long"
+                return None
+            if self.buttons.was_released(self.buttons.BTN_BACK):
+                self._back_pending = False
+                if not self._back_long_emitted:
+                    debug("hardware", "back short press")
+                    return "left"
+                self._back_long_emitted = False
+                debug("hardware", "back long press released")
+                return None
         if not self.buttons.any_pressed: return None
         # InputManager names are documented by the official helper library.
         for index in range(7):
             if self.buttons.was_pressed(index):
+                if index == self.buttons.BTN_BACK:
+                    self._back_pending = True
+                    self._back_long_emitted = False
+                    debug("hardware", "back press pending long threshold=%.2f" % BACK_LONG_PRESS_SECONDS)
+                    return None
                 name = self.buttons.button_name(index).lower().replace(" ", "_")
                 # The physical Back key is the leftmost under-display key.
                 # The two side keys are additional menu navigation controls.

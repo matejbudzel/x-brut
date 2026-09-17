@@ -163,6 +163,11 @@ class Simulator:
             else: self.ui.splash(self.project_name)
             return
         if not self.powered: return
+        if button == "left_long":
+            # Match the device's universal long-Back gesture. The simulator
+            # does not retain the device route stack, but Home is its root.
+            self.show_home()
+            return
         if button == "left" and self.ui.page == "home": self.ui.settings(self.project); return
         result = self.ui.button(button)
         if result == "back":

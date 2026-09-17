@@ -79,6 +79,9 @@ def _run():
                 ui.settings(project)
             else:
                 _back(navigation, ui, project)
+        elif button == "left_long":
+            info("boot", "back long press; clearing history")
+            _home(navigation, ui, project)
         elif ui.page == "settings" and button:
             result = ui.button(button)
             debug("boot", "settings result=%s" % result)
@@ -115,6 +118,21 @@ def _back(navigation, ui, project):
         ui.home(project)
 
 
+def _home(navigation, ui, project):
+    """Clear route history and return to the single canonical home route."""
+    navigation.home()
+    ui.home(project)
+
+
+def _leave(navigation, ui, project, button):
+    """Apply Back or long-Back consistently from every base-owned screen."""
+    if button == "left_long":
+        info("boot", "back long press; clearing history")
+        _home(navigation, ui, project)
+    else:
+        _back(navigation, ui, project)
+
+
 def _ota_screen(navigation, ui, platform, project):
     info("boot", "OTA screen enter")
     back_only = ("Back", "", "", "")
@@ -124,9 +142,12 @@ def _ota_screen(navigation, ui, platform, project):
     if not conf.get("manifest_url"):
         info("boot", "OTA unavailable: no manifest URL")
         ui.show("ota", "OTA", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=back_only, side_labels=no_sides)
-        while platform.button() != "left": time.sleep(0.05)
-        _back(navigation, ui, project)
-        return
+        while True:
+            button = platform.button()
+            if button in ("left", "left_long"):
+                _leave(navigation, ui, project, button)
+                return
+            time.sleep(0.05)
     ui.show("ota", "OTA", ["- FETCHING MANIFEST -"], bottom_labels=back_only, side_labels=no_sides)
     try:
         if not conf.get("wifi_ssid") or not conf.get("wifi_password"): raise RuntimeError("NO_WIFI")
@@ -137,10 +158,10 @@ def _ota_screen(navigation, ui, platform, project):
         can_download = True
         while True:
             button = platform.button()
-            if button == "left":
+            if button in ("left", "left_long"):
                 info("boot", "OTA screen exit before download")
                 platform.disconnect()
-                _back(navigation, ui, project)
+                _leave(navigation, ui, project, button)
                 return
             if button in ("confirm", "button_2") and can_download:
                 try:
@@ -158,10 +179,11 @@ def _ota_screen(navigation, ui, platform, project):
         message = "- NO WIFI AVAILABLE -" if str(problem) == "NO_WIFI" else "- INCORRECT WIFI PASSWORD -"; ui.show("ota", "OTA", [message], bottom_labels=back_only, side_labels=no_sides)
     except Exception as problem: log_error("boot", "manifest failed: %r" % problem); ui.show("ota", "OTA", ["- MANIFEST NOT AVAILABLE -"], bottom_labels=back_only, side_labels=no_sides)
     while True:
-        if platform.button() == "left": break
+        button = platform.button()
+        if button in ("left", "left_long"): break
         time.sleep(0.05)
     platform.disconnect()
-    _back(navigation, ui, project)
+    _leave(navigation, ui, project, button)
     info("boot", "OTA screen exit")
 
 
@@ -172,9 +194,12 @@ def _splash_screen(navigation, ui, platform, project):
     if not conf.get("splash_url"):
         info("boot", "splash update unavailable: no URL")
         ui.show("splash_update", "SPLASH SCREEN", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=back_only, side_labels=("", ""))
-        while platform.button() != "left": time.sleep(0.05)
-        _back(navigation, ui, project)
-        return
+        while True:
+            button = platform.button()
+            if button in ("left", "left_long"):
+                _leave(navigation, ui, project, button)
+                return
+            time.sleep(0.05)
     ui.show("splash_update", "SPLASH SCREEN", ["- FETCHING -"], bottom_labels=back_only, side_labels=("", ""))
     try:
         if not conf.get("wifi_ssid") or not conf.get("wifi_password"): raise RuntimeError("NO_WIFI")
@@ -183,9 +208,9 @@ def _splash_screen(navigation, ui, platform, project):
         ready = True
         while True:
             button = platform.button()
-            if button == "left":
+            if button in ("left", "left_long"):
                 info("boot", "splash update exit")
-                platform.disconnect(); _back(navigation, ui, project); return
+                platform.disconnect(); _leave(navigation, ui, project, button); return
             if button in ("confirm", "button_2") and ready:
                 try:
                     info("boot", "splash download requested")
@@ -204,7 +229,12 @@ def _splash_screen(navigation, ui, platform, project):
                     platform.present_file(SPLASH_PATH)
                 except OSError as problem:
                     debug("boot", "splash preview fallback: %r" % problem); ui.splash("")
-                while not platform.button(): time.sleep(0.05)
+                while True:
+                    preview_button = platform.button()
+                    if preview_button: break
+                    time.sleep(0.05)
+                if preview_button == "left_long":
+                    platform.disconnect(); _leave(navigation, ui, project, preview_button); return
                 ui.show("splash_update", "SPLASH SCREEN", ["SPLASH SCREEN REPLACED"], bottom_labels=("Back", "Preview", "", "Revert"), side_labels=("", ""))
             elif not ready and button == "button_4":
                 info("boot", "splash revert requested")
@@ -215,8 +245,11 @@ def _splash_screen(navigation, ui, platform, project):
         message = "- NO WIFI AVAILABLE -" if str(problem) == "NO_WIFI" else "- INCORRECT WIFI PASSWORD -"; ui.show("splash_update", "SPLASH SCREEN", [message], bottom_labels=back_only, side_labels=("", ""))
     except Exception as problem:
         log_error("boot", "splash manifest failed: %r" % problem); ui.show("splash_update", "SPLASH SCREEN", ["- FETCH FAILED -"], bottom_labels=back_only, side_labels=("", ""))
-    while platform.button() != "left": time.sleep(0.05)
-    platform.disconnect(); _back(navigation, ui, project)
+    while True:
+        button = platform.button()
+        if button in ("left", "left_long"): break
+        time.sleep(0.05)
+    platform.disconnect(); _leave(navigation, ui, project, button)
     info("boot", "splash update screen exit")
 
 def _ap_screen(navigation, ui, platform, project):
@@ -231,10 +264,11 @@ def _ap_screen(navigation, ui, platform, project):
     while True:
         try: server.poll()
         except OSError as problem: debug("boot", "AP poll ignored: %r" % problem)
-        if platform.button() == "left": break
+        button = platform.button()
+        if button in ("left", "left_long"): break
         time.sleep(0.02)
     platform.disconnect()
-    _back(navigation, ui, project)
+    _leave(navigation, ui, project, button)
     info("boot", "AP screen exit")
 
 
@@ -244,7 +278,10 @@ def _document_screen(navigation, ui, platform, project, index):
     ui.show("document", "DOWNLOAD", ["DOWNLOAD", project.short_url(url)], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
     while True:
         button = platform.button()
-        if button == "left": info("boot", "document screen exit"); _back(navigation, ui, project); return
+        if button in ("left", "left_long"):
+            info("boot", "document screen exit")
+            _leave(navigation, ui, project, button)
+            return
         if button in ("confirm", "button_2"):
             try:
                 info("boot", "document download begin index=%d" % index)
