@@ -40,6 +40,12 @@ class Framebuffer:
         for yy in range(y, y + height):
             self.pixel(x, yy, on); self.pixel(x + width - 1, yy, on)
     def text(self, x, y, text, scale=1):
+        # Font iteration allocates a small temporary object on CircuitPython.
+        # Reclaim fragmented import/display allocations before the first UI
+        # text is drawn, where a failed allocation otherwise leaves a blank
+        # screen with no recoverable event loop.
+        import gc
+        gc.collect()
         debug("framebuffer", "text x=%d y=%d scale=%d chars=%d" % (x, y, scale, len(text)))
         for char in text:
             code = ord(char) if ord(char) < 384 else ord("?")

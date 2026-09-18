@@ -153,13 +153,18 @@ class X4Platform:
         # type: () -> None
         debug("hardware", "refresh begin time_to_refresh=%s busy=%s" % (self.display.time_to_refresh, self.display.busy))
         if not self._ram_mode: self._frame.flush()
+        import time
         if self.display.time_to_refresh > 0:
-            import time
-            time.sleep(self.display.time_to_refresh)
+            # Give the controller a small margin: its reported cooldown can
+            # round down just enough for the next refresh to be rejected.
+            time.sleep(self.display.time_to_refresh + 0.05)
         try: self.display.refresh()
         except Exception as problem:
-            error("hardware", "refresh failed: %r" % problem)
-            raise
+            if "Refresh too soon" not in str(problem):
+                error("hardware", "refresh failed: %r" % problem)
+                raise
+            time.sleep(max(0.05, self.display.time_to_refresh + 0.05))
+            self.display.refresh()
         debug("hardware", "refresh complete")
     def button(self):
         self.buttons.update()
