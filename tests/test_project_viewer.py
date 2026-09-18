@@ -12,12 +12,14 @@ PROJECT_PATH = ROOT / "device" / "CIRCUITPY" / "project.py"
 
 def load_project():
     storage, paths = ModuleType("xbrut_storage"), ModuleType("xbrut_paths")
-    storage.read_json, storage.write_json = lambda path, default=None: default, lambda path, value: None
-    paths.DATA_ROOT, paths.DOCUMENTS_PATH, paths.PROJECT_CONFIG_PATH = "/sd", "/sd/xviewer-docs", "/sd/project-conf.json"
+    values = {}
+    storage.read_json = lambda path, default=None: values.get(path, default)
+    storage.write_json = lambda path, value: values.__setitem__(path, value)
+    paths.DATA_ROOT, paths.DOCUMENTS_PATH, paths.PROJECT_CONFIG_PATH, paths.BOOKMARKS_PATH = "/sd", "/sd/xviewer-docs", "/sd/project-conf.json", "/sd/xviewer-bookmarks.json"
     spec = importlib.util.spec_from_file_location("project_viewer_under_test", PROJECT_PATH)
     project = importlib.util.module_from_spec(spec)
     with patch.dict("sys.modules", {"xbrut_storage": storage, "xbrut_paths": paths}): spec.loader.exec_module(project)
-    return project
+    return project, values
 
 
 def frame(kind, first=255, second=None):
@@ -36,7 +38,9 @@ class Platform:
 
 
 class ProjectViewerTest(unittest.TestCase):
-    def setUp(self): self.project, self.temp = load_project(), tempfile.TemporaryDirectory()
+    def setUp(self):
+        self.project, self.values = load_project()
+        self.temp = tempfile.TemporaryDirectory()
     def tearDown(self): self.temp.cleanup()
 
     def test_renders_and_inverts_a_fullscreen_xtg_page(self):
@@ -63,6 +67,23 @@ class ProjectViewerTest(unittest.TestCase):
         self.project.render_page(platform, str(path), 0)
         self.assertEqual(self.project.page_count(str(path)), 1)
         self.assertEqual(platform.frames[0][0], 128)
+
+    def test_bookmarks_are_per_document_and_can_be_cleared(self):
+        self.project.save_bookmark("doc-000.xth", 3)
+        self.project.save_bookmark("doc-001.xth", 1)
+        self.assertEqual(self.project.bookmark("doc-000.xth"), 3)
+        self.project.clear_bookmark("doc-000.xth")
+        self.assertEqual(self.project.bookmark("doc-000.xth"), 0)
+        self.assertEqual(self.project.bookmark("doc-001.xth"), 1)
+
+    def test_successful_redownload_clears_its_bookmark(self):
+        self.project.set_root(self.temp.name)
+        self.values[self.temp.name + "/project-conf.json"] = {"document_urls": ["https://example.test/book.xth"]}
+        self.project.save_bookmark("doc-000.xth", 4)
+        platform = ModuleType("platform")
+        platform.bytes = lambda url, progress=None: frame(b"XTG\0")
+        self.project.download(platform, 0)
+        self.assertEqual(self.project.bookmark("doc-000.xth"), 0)
 
 
 if __name__ == "__main__": unittest.main()

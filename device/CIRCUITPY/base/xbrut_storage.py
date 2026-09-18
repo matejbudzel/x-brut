@@ -43,7 +43,8 @@ def _migrate_legacy_data(legacy_root="/", data_root=DATA_ROOT):
     migrated = 0
     for name in (
         "base-conf.json", "base-conf.json.new", "project-conf.json",
-        "project-conf.json.new", "base.log", "base.log.1", "splash.bin",
+        "project-conf.json.new", "xviewer-bookmarks.json", "xviewer-bookmarks.json.new",
+        "base.log", "base.log.1", "splash.bin",
         "splash.bin.bak", "splash.bin.new",
     ):
         if _migrate_file(_join(legacy_root, name), _join(data_root, name)):

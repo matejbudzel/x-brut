@@ -33,6 +33,19 @@ def write_config(value):
     os.replace(temporary, CONFIG_PATH)
 
 
+def read_project_data(path, default=None):
+    try:
+        with open(path, "r") as handle: return json.load(handle)
+    except (OSError, ValueError): return default
+
+
+def write_project_data(path, value):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = path + ".new"
+    with open(temporary, "w") as handle: json.dump(value, handle)
+    os.replace(temporary, path)
+
+
 def log(message):
     os.makedirs(SIMULATOR_DATA, exist_ok=True)
     xbrut_log.info("simulator", message)
@@ -130,6 +143,9 @@ class Simulator:
         xbrut_log.configure(read_config())
         xbrut_log.info("simulator", "initializing")
         project.set_root(SIMULATOR_DATA)
+        # The device writer requires a mounted physical SD card.  The simulator
+        # maps the same project files to its persistent local data directory.
+        project.read_json, project.write_json = read_project_data, write_project_data
         self.project = project
         self.platform = Platform(); self.ui = BaseUI(self.platform); self.powered = True; self.project_name = "xViewer"; self.revision = uuid.uuid4().hex
         self.sd_present, self.sd_reload_required = True, False
@@ -147,9 +163,10 @@ class Simulator:
         self.ui.settings(self.project, focus=focus, sd_status=status)
 
     def show_viewer(self, filename):
-        self.viewer_filename, self.viewer_page = filename, 0
+        self.viewer_filename = filename
         path = self.project._path(self.project.DOCUMENTS_PATH + "/" + filename)
         self.viewer_pages = self.project.page_count(path)
+        self.viewer_page = min(self.project.bookmark(filename), self.viewer_pages - 1)
         self.ui.page, self.ui.actions, self.ui.lines = "viewer", [], []
         self.project.render_page(self.platform, path, self.viewer_page)
 
@@ -189,6 +206,7 @@ class Simulator:
         if button == "left_long":
             # Match the device's universal long-Back gesture. The simulator
             # does not retain the device route stack, but Home is its root.
+            if self.ui.page == "viewer": self.project.save_bookmark(self.viewer_filename, self.viewer_page)
             self.show_home()
             return
         if self.ui.page == "sd_manager":
@@ -201,7 +219,9 @@ class Simulator:
                 self.show_home()
             return
         if self.ui.page == "viewer":
-            if button == "left": self.show_home()
+            if button == "left":
+                self.project.save_bookmark(self.viewer_filename, self.viewer_page)
+                self.show_home()
             elif button in ("up", "side_up", "button_3") and self.viewer_page > 0:
                 self.viewer_page -= 1
                 self.show_viewer_page()

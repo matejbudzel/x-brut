@@ -362,16 +362,19 @@ def _document_screen(navigation, ui, platform, project, index):
 def _viewer_screen(navigation, ui, platform, project, filename):
     """Run the bare document viewer; it deliberately never invokes BaseUI."""
     path = project._path(project.DOCUMENTS_PATH + "/" + filename)
-    pages, page = project.page_count(path), 0
+    pages, page = project.page_count(path), project.bookmark(filename)
     if pages < 1: raise ValueError("DOCUMENT HAS NO PAGES")
+    if page >= pages: page = 0
     ui.page, ui.actions, ui.lines = "viewer", [], []
     project.render_page(platform, path, page)
     while True:
         button = platform.button()
         if button == "left_long":
+            project.save_bookmark(filename, page)
             navigation.home(); ui.home(project)
             return
         if button == "left":
+            project.save_bookmark(filename, page)
             navigation.back()
             return
         if button in ("up", "side_up", "button_3") and page > 0:

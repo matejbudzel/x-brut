@@ -1,7 +1,7 @@
 """xViewer: URL-managed XTC/XTH document library for the X Brut base."""
 import os
 from xbrut_storage import read_json, write_json
-from xbrut_paths import DATA_ROOT, DOCUMENTS_PATH, PROJECT_CONFIG_PATH
+from xbrut_paths import BOOKMARKS_PATH, DATA_ROOT, DOCUMENTS_PATH, PROJECT_CONFIG_PATH
 
 PROJECT_NAME = "xViewer"
 PROJECT_VERSION = "0.1.0"
@@ -27,6 +27,28 @@ def save_urls(urls):
     value = config()
     value["document_urls"] = [url.strip() for url in urls if url and url.strip()]
     write_json(_path(PROJECT_CONFIG_PATH), value)
+
+
+def bookmarks():
+    value = read_json(_path(BOOKMARKS_PATH), {}) or {}
+    if not isinstance(value, dict): return {}
+    return {name: page for name, page in value.items() if isinstance(name, str) and isinstance(page, int) and page >= 0}
+
+
+def bookmark(filename): return bookmarks().get(filename, 0)
+
+
+def save_bookmark(filename, page):
+    value = bookmarks()
+    value[filename] = page
+    write_json(_path(BOOKMARKS_PATH), value)
+
+
+def clear_bookmark(filename):
+    value = bookmarks()
+    if filename in value:
+        del value[filename]
+        write_json(_path(BOOKMARKS_PATH), value)
 
 
 def short_url(url, limit=42):
@@ -148,4 +170,5 @@ def download(platform, index, progress=None):
     try: os.rename(path, path + ".bak")
     except OSError: pass
     os.rename(path + ".new", path)
+    clear_bookmark(document_name(index))
     return metadata(path)
