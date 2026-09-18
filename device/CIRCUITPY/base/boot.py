@@ -84,6 +84,9 @@ def _run():
         elif button == "left_long":
             info("boot", "back long press; clearing history")
             _home(navigation, ui, project)
+        elif ui.page == "home" and button:
+            # Project homes use the base's normal cyclic list navigation.
+            ui.button(button)
         elif ui.page == "settings" and button:
             result = ui.button(button)
             debug("boot", "settings result=%s" % result)

@@ -10,6 +10,7 @@ class BaseUI:
     def __init__(self, platform):
         self.platform, self.frame, self.page, self.focus = platform, Framebuffer(platform), "home", 0
         self.lines, self.actions = [], []
+        self._grid_items = []
         self.title = "xBrut"
         self.bottom_labels, self.side_labels = ("", "", "", ""), ("", "")
         self.read_only = False
@@ -18,6 +19,7 @@ class BaseUI:
     def show(self, page, title, lines=(), actions=(), bottom_labels=("Back", "Open", "v", "v"), side_labels=("v", "v"), focus=0):
         info("ui", "show page=%s title=%s focus=%d lines=%d actions=%d" % (page, title, focus, len(lines), len(actions)))
         self.page, self.title, self.focus, self.lines, self.actions = page, title, focus, list(lines), list(actions)
+        self._grid_items = []
         self.bottom_labels, self.side_labels = bottom_labels, side_labels
         self.frame.clear(); self.frame.text(CONTENT_X, 22, title, 2)
         y = 82
@@ -70,10 +72,64 @@ class BaseUI:
 
     def home(self, project=None):
         debug("ui", "home requested project=%s" % getattr(project, "PROJECT_NAME", "none"))
+        if not self.read_only and project and hasattr(project, "home"):
+            project.home(self)
+            return
         project_label = getattr(project, "HOME_ACTION_LABEL", "") if project else ""
         title = getattr(project, "PROJECT_NAME", "xBrut") if project else "xBrut"
         lines = ["NO SD CARD - READ ONLY"] if self.read_only else ["READY"]
         self.show("home", title, lines, bottom_labels=("Settings", project_label, "", ""), side_labels=("", ""))
+
+    def document_grid(self, title, documents, focus=0):
+        """Draw a two-column library grid; project code supplies document names."""
+        self.page, self.title = "home", title
+        self._grid_items = list(documents)
+        self.lines = []
+        self.actions = []
+        self.focus = min(max(0, focus), len(self._grid_items) - 1) if self._grid_items else 0
+        self.bottom_labels = ("Settings", "", "v" if len(self._grid_items) > 1 else "", "v" if len(self._grid_items) > 1 else "")
+        self.side_labels = ("v", "v") if len(self._grid_items) > 1 else ("", "")
+        self.frame.clear()
+        self.frame.text(CONTENT_X, 22, title, 2)
+        if not self._grid_items:
+            self.frame.text((480 - len("- NO DOCUMENTS AVAILABLE -") * 8) // 2, 390, "- NO DOCUMENTS AVAILABLE -")
+        else:
+            # Use the same focused viewport policy as the SD-card explorer:
+            # keep two tile rows visible and scroll by one row when needed.
+            total_rows, visible_rows = (len(self._grid_items) + 1) // 2, 2
+            focus_row = self.focus // 2
+            start_row = max(0, min(focus_row - visible_rows // 2, total_rows - visible_rows))
+            start = start_row * 2
+            for slot, item in enumerate(self._grid_items[start:start + visible_rows * 2]):
+                index = start + slot
+                column, row = slot % 2, slot // 2
+                x, y = 35 + column * 210, 82 + row * 318
+                self.frame.outline(x, y, 200, 300)
+                if index == self.focus: self.frame.outline(x - 3, y - 3, 206, 306)
+                self._tile_name(x, y, item[1])
+            if total_rows > visible_rows:
+                viewport_height = visible_rows * 300 + 18
+                height = max(12, viewport_height * visible_rows // total_rows)
+                top = 82 + (viewport_height - height) * start_row // (total_rows - visible_rows)
+                self.frame.rect(468, top, 5, height)
+        self._battery(); self._labels(); self.platform.refresh()
+
+    def _tile_name(self, x, y, name):
+        """Wrap a document name into a small, centered block within its tile."""
+        lines, line = [], ""
+        for word in name.split() or ["-"]:
+            while len(word) > 22:
+                if line: lines.append(line); line = ""
+                lines.append(word[:22]); word = word[22:]
+            candidate = word if not line else line + " " + word
+            if len(candidate) > 22:
+                lines.append(line); line = word
+            else: line = candidate
+        if line: lines.append(line)
+        if len(lines) > 3: lines = lines[:2] + [lines[2][:19] + "..."]
+        start_y = y + (300 - len(lines) * 16) // 2
+        for index, line in enumerate(lines):
+            self.frame.text(x + (200 - len(line) * 8) // 2, start_y + index * 16, line)
 
     def _label_centered(self, center, y, label, rotated=False):
         if label:
@@ -132,6 +188,17 @@ class BaseUI:
     def button(self, name):
         debug("ui", "button name=%s page=%s focus=%d" % (name, self.page, self.focus))
         if name == "left": return "back"
+        if self.page == "home" and self._grid_items:
+            if name in ("up", "side_up", "button_3"):
+                self.focus = (self.focus - 1) % len(self._grid_items)
+            elif name in ("down", "side_down", "button_4"):
+                self.focus = (self.focus + 1) % len(self._grid_items)
+            elif name in ("confirm", "button_2"):
+                return None
+            else:
+                return None
+            self.document_grid(self.title, self._grid_items, self.focus)
+            return None
         if name in ("up", "side_up", "button_3") and self.actions:
             self.focus = (self.focus - 1) % len(self.actions)
             while self.actions[self.focus][1] == "section": self.focus = (self.focus - 1) % len(self.actions)

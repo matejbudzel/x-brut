@@ -60,7 +60,13 @@ def downloaded():
         if name.endswith(".xth"):
             try: result.append((name, metadata(_path(DOCUMENTS_PATH + "/" + name))) )
             except Exception: pass
-    return result
+    return sorted(result)
+
+
+def home(ui):
+    """Render the reader library, leaving tile drawing and focus to the base UI."""
+    documents = downloaded()
+    ui.document_grid(PROJECT_NAME, [(filename, info.get("title") or filename) for filename, info in documents])
 
 
 def download(platform, index, progress=None):

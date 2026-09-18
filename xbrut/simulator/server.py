@@ -139,16 +139,7 @@ class Simulator:
 
     def show_home(self):
         self.ui.read_only = not self.sd_present or self.sd_reload_required
-        if self.ui.read_only:
-            self.ui.home(self.project)
-            return
-        documents = self.project.downloaded()
-        if not documents:
-            self.ui.show("home", "xViewer", ["- NO DOCUMENTS AVAILABLE -"], bottom_labels=("Settings", "", "", ""), side_labels=("", ""))
-            return
-        lines = [entry[1].get("title") or entry[0] for entry in documents]
-        arrows = ("v", "v") if len(lines) > 1 else ("", "")
-        self.ui.show("home", "xViewer", lines, bottom_labels=("Settings", "Read", "v" if arrows[0] else "", "v" if arrows[1] else ""), side_labels=arrows)
+        self.ui.home(self.project)
 
     def show_settings(self, focus=0):
         status = "simulated" if self.sd_present and not self.sd_reload_required else "none"
