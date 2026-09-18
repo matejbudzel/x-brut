@@ -40,7 +40,7 @@ class DocumentGridTest(unittest.TestCase):
         self.assertIn((242, 79), self.platform.pixels)
         for unused in range(3): self.ui.button("down")
         self.assertEqual(self.ui.focus, 4)
-        self.assertIn((32, 397), self.platform.pixels)
+        self.assertIn((32, 422), self.platform.pixels)
         self.assertTrue(any(x == 468 for x, y in self.platform.pixels))
         self.ui.button("down")
         self.assertEqual(self.ui.focus, 0)

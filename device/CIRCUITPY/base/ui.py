@@ -103,18 +103,18 @@ class BaseUI:
             for slot, item in enumerate(self._grid_items[start:start + visible_rows * 2]):
                 index = start + slot
                 column, row = slot % 2, slot // 2
-                x, y = 35 + column * 210, 82 + row * 318
-                self.frame.outline(x, y, 200, 300)
-                if index == self.focus: self.frame.outline(x - 3, y - 3, 206, 306)
-                self._tile_name(x, y, item[1])
+                x, y = 35 + column * 210, 82 + row * 343
+                self.frame.outline(x, y, 200, 333)
+                if index == self.focus: self.frame.outline(x - 3, y - 3, 206, 339)
+                self._tile_name(x, y, 333, item[1])
             if total_rows > visible_rows:
-                viewport_height = visible_rows * 300 + 18
+                viewport_height = visible_rows * 333 + 10
                 height = max(12, viewport_height * visible_rows // total_rows)
                 top = 82 + (viewport_height - height) * start_row // (total_rows - visible_rows)
                 self.frame.rect(468, top, 5, height)
         self._battery(); self._labels(); self.platform.refresh()
 
-    def _tile_name(self, x, y, name):
+    def _tile_name(self, x, y, height, name):
         """Wrap a document name into a small, centered block within its tile."""
         lines, line = [], ""
         for word in name.split() or ["-"]:
@@ -127,7 +127,7 @@ class BaseUI:
             else: line = candidate
         if line: lines.append(line)
         if len(lines) > 3: lines = lines[:2] + [lines[2][:19] + "..."]
-        start_y = y + (300 - len(lines) * 16) // 2
+        start_y = y + (height - len(lines) * 16) // 2
         for index, line in enumerate(lines):
             self.frame.text(x + (200 - len(line) * 8) // 2, start_y + index * 16, line)
 
