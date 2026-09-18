@@ -1,5 +1,5 @@
 """Device orchestration; a damaged project never prevents the settings UI."""
-import supervisor, time
+import gc, supervisor, time
 from xbrut_storage import read_json, sd_available, sd_card_status
 from xbrut_log import configure, debug, error as log_error, exception as log_exception, info, safe_url
 from xbrut_paths import BASE_CONFIG_PATH, SPLASH_PATH
@@ -35,6 +35,9 @@ def _run():
     debug("boot", "constructing platform")
     platform = X4Platform()
     project = _load_project()
+    # CircuitPython may leave the heap fragmented after imports; reclaim it
+    # before the first framebuffer text allocations during startup.
+    gc.collect()
     ui = BaseUI(platform)
     ui.read_only = not sd_available()
     navigation = Navigation("home")
@@ -48,9 +51,11 @@ def _run():
         debug("boot", "cached splash unavailable: %r" % problem)
     if not splash_loaded:
         debug("boot", "displaying fallback splash")
+        gc.collect()
         ui.splash(getattr(project, "PROJECT_NAME", ""))
     time.sleep(1)
     debug("boot", "displaying home")
+    gc.collect()
     ui.home(project)
     # A project may draw its home screen but base always intercepts left/settings and power.
     if project and hasattr(project, "main"):
