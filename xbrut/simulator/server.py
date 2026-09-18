@@ -113,6 +113,15 @@ class Platform:
     def battery_status(self): return self.battery_percent, self.charging
     def clear(self): self.bitmap.fill(0)
     def pixel(self, x, y, on=True): self.bitmap[x, y] = 1 if on else 0
+    def blit(self, x, y, width, height, packed):
+        row_bytes = (width + 7) // 8
+        for row in range(height):
+            for column in range(width):
+                if packed[row * row_bytes + column // 8] & (128 >> (column & 7)):
+                    self.bitmap[x + column, y + row] = 1
+    def fill_rect(self, x, y, width, height, on=False):
+        for row in range(y, y + height):
+            for column in range(x, x + width): self.bitmap[column, row] = 1 if on else 0
     def present(self, packed):
         self.frame = bytes(packed)
         self.bitmap.data[:] = self.frame
@@ -167,6 +176,8 @@ class Simulator:
         path = self.project._path(self.project.DOCUMENTS_PATH + "/" + filename)
         self.viewer_pages = self.project.page_count(path)
         self.viewer_page = min(self.project.bookmark(filename), self.viewer_pages - 1)
+        self.viewer_chapters = self.project.toc(path)
+        self.viewer_menu_open = False
         self.ui.page, self.ui.actions, self.ui.lines = "viewer", [], []
         self.project.render_page(self.platform, path, self.viewer_page)
 
@@ -220,8 +231,27 @@ class Simulator:
             return
         if self.ui.page == "viewer":
             if button == "left":
-                self.project.save_bookmark(self.viewer_filename, self.viewer_page)
-                self.show_home()
+                if self.viewer_menu_open:
+                    self.viewer_menu_open = False
+                    self.show_viewer_page()
+                else:
+                    self.project.save_bookmark(self.viewer_filename, self.viewer_page)
+                    self.show_home()
+            elif self.viewer_menu_open:
+                if button in ("up", "side_up", "button_3") and self.viewer_chapters:
+                    self.viewer_chapter_focus = (self.viewer_chapter_focus - 1) % len(self.viewer_chapters)
+                    self.show_viewer_menu()
+                elif button in ("down", "side_down", "button_4") and self.viewer_chapters:
+                    self.viewer_chapter_focus = (self.viewer_chapter_focus + 1) % len(self.viewer_chapters)
+                    self.show_viewer_menu()
+                elif button in ("confirm", "button_2") and self.viewer_chapters:
+                    self.viewer_page = min(self.viewer_chapters[self.viewer_chapter_focus][1], self.viewer_pages - 1)
+                    self.viewer_menu_open = False
+                    self.show_viewer_page()
+            elif button in ("confirm", "button_2"):
+                self.viewer_menu_open = True
+                self.viewer_chapter_focus = self.project.toc_focus(self.viewer_chapters, self.viewer_page)
+                self.show_viewer_menu()
             elif button in ("up", "side_up", "button_3") and self.viewer_page > 0:
                 self.viewer_page -= 1
                 self.show_viewer_page()
@@ -297,6 +327,10 @@ class Simulator:
     def show_viewer_page(self):
         path = self.project._path(self.project.DOCUMENTS_PATH + "/" + self.viewer_filename)
         self.project.render_page(self.platform, path, self.viewer_page)
+
+    def show_viewer_menu(self):
+        path = self.project._path(self.project.DOCUMENTS_PATH + "/" + self.viewer_filename)
+        self.ui.viewer_menu(self.project.metadata(path), self.viewer_chapters, self.viewer_chapter_focus)
 
 
 def handler(sim):

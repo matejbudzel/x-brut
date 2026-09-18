@@ -88,6 +88,7 @@ class StorageTest(unittest.TestCase):
         paths.PROJECT_CONFIG_PATH = "/sd/project-conf.json"
         paths.DOCUMENTS_PATH = "/sd/xviewer-docs"
         paths.BOOKMARKS_PATH = "/sd/xviewer-bookmarks.json"
+        paths.THUMBNAILS_PATH = "/sd/xviewer-thumbnails"
         spec = importlib.util.spec_from_file_location("project_under_test", PROJECT_PATH)
         if spec is None or spec.loader is None:
             raise AssertionError("could not load project.py")

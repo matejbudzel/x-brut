@@ -82,6 +82,46 @@ class X4Platform:
         offset, mask = self._row_offset(y) + x // 8, 128 >> (x & 7)
         self._frame.seek(offset); value = self._frame.read(1)[0]
         self._frame.seek(offset); self._frame.write(bytes((value | mask if on else value & ~mask,)))
+    def blit(self, x, y, width, height, packed):
+        # type: (int, int, int, int, bytes) -> None
+        """OR a packed monochrome bitmap into the current framebuffer."""
+        source_row, shift, target_byte = (width + 7) // 8, x & 7, x // 8
+        if self._ram_mode:
+            for row in range(height):
+                for column in range(width):
+                    if packed[row * source_row + column // 8] & (128 >> (column & 7)):
+                        self._ram_bitmap[x + column, y + row] = 1
+            return
+        target_width = (width + shift + 7) // 8
+        for row in range(height):
+            offset = self._row_offset(y + row) + target_byte
+            self._frame.seek(offset); target = bytearray(self._frame.read(target_width))
+            source = packed[row * source_row:(row + 1) * source_row]
+            for index, value in enumerate(source):
+                target[index] |= value >> shift
+                if index + 1 < target_width: target[index + 1] |= (value << (8 - shift)) & 255
+            self._frame.seek(offset); self._frame.write(target)
+    def fill_rect(self, x, y, width, height, on=False):
+        # type: (int, int, int, int, bool) -> None
+        if on:
+            for row in range(height):
+                for column in range(width): self.pixel(x + column, y + row)
+            return
+        if self._ram_mode:
+            for row in range(height):
+                for column in range(width): self._ram_bitmap[x + column, y + row] = 0
+            return
+        first, last = x // 8, (x + width - 1) // 8
+        masks = []
+        for byte in range(first, last + 1):
+            mask = 0
+            for column in range(max(x, byte * 8), min(x + width, byte * 8 + 8)): mask |= 128 >> (column & 7)
+            masks.append(mask)
+        for row in range(height):
+            offset = self._row_offset(y + row) + first
+            self._frame.seek(offset); values = bytearray(self._frame.read(len(masks)))
+            for index, mask in enumerate(masks): values[index] &= ~mask
+            self._frame.seek(offset); self._frame.write(values)
     def present(self, packed):
         # type: (bytes) -> None
         debug("hardware", "present begin bytes=%d" % len(packed))

@@ -367,6 +367,7 @@ def _viewer_screen(navigation, ui, platform, project, filename):
     if page >= pages: page = 0
     ui.page, ui.actions, ui.lines = "viewer", [], []
     project.render_page(platform, path, page)
+    chapters, menu_open, chapter_focus = project.toc(path), False, 0
     while True:
         button = platform.button()
         if button == "left_long":
@@ -374,9 +375,27 @@ def _viewer_screen(navigation, ui, platform, project, filename):
             navigation.home(); ui.home(project)
             return
         if button == "left":
+            if menu_open:
+                menu_open = False; project.render_page(platform, path, page)
+                continue
             project.save_bookmark(filename, page)
             navigation.back()
             return
+        if menu_open:
+            if button in ("up", "side_up", "button_3") and chapters:
+                chapter_focus = (chapter_focus - 1) % len(chapters)
+                ui.viewer_menu(project.metadata(path), chapters, chapter_focus)
+            elif button in ("down", "side_down", "button_4") and chapters:
+                chapter_focus = (chapter_focus + 1) % len(chapters)
+                ui.viewer_menu(project.metadata(path), chapters, chapter_focus)
+            elif button in ("confirm", "button_2") and chapters:
+                page = min(chapters[chapter_focus][1], pages - 1)
+                menu_open = False; project.render_page(platform, path, page)
+            continue
+        if button in ("confirm", "button_2"):
+            menu_open = True; chapter_focus = project.toc_focus(chapters, page)
+            ui.viewer_menu(project.metadata(path), chapters, chapter_focus)
+            continue
         if button in ("up", "side_up", "button_3") and page > 0:
             page -= 1; project.render_page(platform, path, page)
         elif button in ("down", "side_down", "button_4") and page + 1 < pages:

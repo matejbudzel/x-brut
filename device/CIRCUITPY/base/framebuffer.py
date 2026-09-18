@@ -28,6 +28,9 @@ class Framebuffer:
         if 0 <= x < WIDTH and 0 <= y < HEIGHT:
             self.platform.pixel(x, y, on)
     def rect(self, x, y, width, height, on=True):
+        if not on:
+            self.platform.fill_rect(x, y, width, height, False)
+            return
         for yy in range(y, y + height):
             for xx in range(x, x + width): self.pixel(xx, yy, on)
     def outline(self, x, y, width, height, on=True):
@@ -51,6 +54,10 @@ class Framebuffer:
         debug("framebuffer", "text_bold x=%d y=%d scale=%d chars=%d" % (x, y, scale, len(text)))
         self.text(x, y, text, scale)
         self.text(x + scale, y, text, scale)
+
+    def bitmap(self, x, y, width, height, packed):
+        """Draw a packed monochrome bitmap, with 1 representing black."""
+        self.platform.blit(x, y, width, height, packed)
 
     def text_rotated_180(self, x, y, text, scale=1):
         """Draw Sweet16 text rotated in bitmap space, without a second glyph."""

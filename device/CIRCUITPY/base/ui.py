@@ -85,7 +85,7 @@ class BaseUI:
         self.page, self.title = "home", title
         self._grid_items = list(documents)
         self.lines = []
-        self.actions = [(name, "read:" + filename) for filename, name in self._grid_items]
+        self.actions = [(item[1], "read:" + item[0]) for item in self._grid_items]
         self.focus = min(max(0, focus), len(self._grid_items) - 1) if self._grid_items else 0
         self.bottom_labels = ("Settings", "Read" if self._grid_items else "", "v" if len(self._grid_items) > 1 else "", "v" if len(self._grid_items) > 1 else "")
         self.side_labels = ("v", "v") if len(self._grid_items) > 1 else ("", "")
@@ -106,7 +106,8 @@ class BaseUI:
                 x, y = 35 + column * 210, 82 + row * 343
                 self.frame.outline(x, y, 200, 333)
                 if index == self.focus: self.frame.outline(x - 3, y - 3, 206, 339)
-                self._tile_name(x, y, 333, item[1])
+                if len(item) > 2 and item[2]: self.frame.bitmap(x, y, 200, 333, item[2])
+                else: self._tile_name(x, y, 333, item[1])
             if total_rows > visible_rows:
                 viewport_height = visible_rows * 333 + 10
                 height = max(12, viewport_height * visible_rows // total_rows)
@@ -243,3 +244,26 @@ class BaseUI:
         else:
             self.bottom_labels, self.side_labels = ("Back", "Delete", "v", "v"), ("", "")
         self._battery(); self._labels(); self.platform.refresh()
+
+    def viewer_menu(self, document, chapters, focus):
+        """Overlay a compact metadata and chapter list without viewer chrome."""
+        x, y, width, height = 30, 100, 420, 600
+        self.frame.rect(x, y, width, height, False); self.frame.outline(x, y, width, height)
+        self.frame.text(52, 124, (document.get("title") or "DOCUMENT").upper()[:25], 2)
+        self.frame.text(52, 164, ("AUTHOR: " + (document.get("author") or "-")).upper()[:43])
+        self.frame.text(52, 184, "PAGES: %d" % document.get("pages", 0))
+        self.frame.text_bold(52, 220, "CONTENTS")
+        if not chapters:
+            self.frame.text(52, 260, "- NO CHAPTERS -")
+        else:
+            visible = 17
+            start = max(0, min(focus - visible // 2, max(0, len(chapters) - visible)))
+            for offset, chapter in enumerate(chapters[start:start + visible]):
+                index, row_y = start + offset, 250 + offset * 24
+                if index == focus: self.frame.outline(46, row_y - 4, 360, 22)
+                self.frame.text(52, row_y, chapter[0].upper()[:42])
+            if len(chapters) > visible:
+                thumb_height = max(12, visible * 24 * visible // len(chapters))
+                top = 250 + (visible * 24 - thumb_height) * start // max(1, len(chapters) - visible)
+                self.frame.rect(420, top, 5, thumb_height)
+        self.platform.refresh()

@@ -15,7 +15,7 @@ def load_project():
     values = {}
     storage.read_json = lambda path, default=None: values.get(path, default)
     storage.write_json = lambda path, value: values.__setitem__(path, value)
-    paths.DATA_ROOT, paths.DOCUMENTS_PATH, paths.PROJECT_CONFIG_PATH, paths.BOOKMARKS_PATH = "/sd", "/sd/xviewer-docs", "/sd/project-conf.json", "/sd/xviewer-bookmarks.json"
+    paths.DATA_ROOT, paths.DOCUMENTS_PATH, paths.PROJECT_CONFIG_PATH, paths.BOOKMARKS_PATH, paths.THUMBNAILS_PATH = "/sd", "/sd/xviewer-docs", "/sd/project-conf.json", "/sd/xviewer-bookmarks.json", "/sd/xviewer-thumbnails"
     spec = importlib.util.spec_from_file_location("project_viewer_under_test", PROJECT_PATH)
     project = importlib.util.module_from_spec(spec)
     with patch.dict("sys.modules", {"xbrut_storage": storage, "xbrut_paths": paths}): spec.loader.exec_module(project)
@@ -84,6 +84,35 @@ class ProjectViewerTest(unittest.TestCase):
         platform.bytes = lambda url, progress=None: frame(b"XTG\0")
         self.project.download(platform, 0)
         self.assertEqual(self.project.bookmark("doc-000.xth"), 0)
+        self.assertEqual(len(self.project.thumbnail("doc-000.xth")), 25 * 333)
+
+    def test_active_home_backfills_only_one_missing_thumbnail(self):
+        self.project.set_root(self.temp.name)
+        documents = Path(self.temp.name) / "xviewer-docs"
+        documents.mkdir()
+        (documents / "doc-000.xth").write_bytes(frame(b"XTG\0"))
+        (documents / "doc-001.xth").write_bytes(frame(b"XTG\0"))
+
+        class UI:
+            def document_grid(self, title, entries, focus): self.entries = entries
+
+        ui = UI()
+        self.project.home(ui)
+        self.assertIsNotNone(self.project.thumbnail("doc-000.xth"))
+        self.assertIsNone(self.project.thumbnail("doc-001.xth"))
+        self.assertIsNotNone(ui.entries[0][2])
+        self.assertIsNone(ui.entries[1][2])
+
+    def test_reads_toc_and_focuses_the_current_chapter(self):
+        path = Path(self.temp.name) / "toc.xtc"
+        data = bytearray(56 + 256 + 96)
+        data[:4], data[11], data[16:24], data[24:32], data[48:56] = b"XTC\0", 1, (56).to_bytes(8, "little"), (408).to_bytes(8, "little"), (312).to_bytes(8, "little")
+        data[56 + 246:56 + 248] = (1).to_bytes(2, "little")
+        data[312:319], data[392:394] = b"Chapter", (7).to_bytes(2, "little")
+        path.write_bytes(data)
+        chapters = self.project.toc(str(path))
+        self.assertEqual(chapters, [("Chapter", 6)])
+        self.assertEqual(self.project.toc_focus(chapters, 9), 0)
 
 
 if __name__ == "__main__": unittest.main()

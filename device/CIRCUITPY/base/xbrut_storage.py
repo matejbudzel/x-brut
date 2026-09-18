@@ -59,6 +59,16 @@ def _migrate_legacy_data(legacy_root="/", data_root=DATA_ROOT):
                 migrated += 1
         try: os.rmdir(source_docs)
         except OSError: pass
+    source_thumbnails = _join(legacy_root, "xviewer-thumbnails")
+    target_thumbnails = _join(data_root, "xviewer-thumbnails")
+    if _exists(source_thumbnails):
+        try: os.mkdir(target_thumbnails)
+        except OSError: pass
+        for name in os.listdir(source_thumbnails):
+            if _migrate_file(source_thumbnails + "/" + name, target_thumbnails + "/" + name):
+                migrated += 1
+        try: os.rmdir(source_thumbnails)
+        except OSError: pass
     # This file is only a disposable display buffer, so do not copy it.
     try: os.remove(_join(legacy_root, ".xbrut-frame.bmp")); migrated += 1
     except OSError: pass

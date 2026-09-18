@@ -17,6 +17,10 @@ class Platform:
     def pixel(self, x, y, on=True):
         if on: self.pixels.add((x, y))
         else: self.pixels.discard((x, y))
+    def blit(self, x, y, width, height, packed): pass
+    def fill_rect(self, x, y, width, height, on=False):
+        for yy in range(y, y + height):
+            for xx in range(x, x + width): self.pixel(xx, yy, on)
     def refresh(self): self.refreshes += 1
 
 
@@ -46,6 +50,15 @@ class DocumentGridTest(unittest.TestCase):
         self.assertEqual(self.ui.focus, 0)
         self.ui.button("up")
         self.assertEqual(self.ui.focus, 4)
+
+    def test_thumbnail_entries_keep_their_document_action(self):
+        self.ui.document_grid("xViewer", [("doc-000.xth", "Document 0", b"\0" * (25 * 333))])
+        self.assertEqual(self.ui.button("confirm"), "read:doc-000.xth")
+
+    def test_viewer_menu_draws_without_base_chrome(self):
+        refreshes = self.platform.refreshes
+        self.ui.viewer_menu({"title": "Book", "author": "Author"}, [("Chapter", 0)], 0)
+        self.assertEqual(self.platform.refreshes, refreshes + 1)
 
 
 if __name__ == "__main__":
