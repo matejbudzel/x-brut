@@ -46,14 +46,19 @@ class Framebuffer:
         # screen with no recoverable event loop.
         import gc
         gc.collect()
-        debug("framebuffer", "text x=%d y=%d scale=%d chars=%d" % (x, y, scale, len(text)))
-        for char in text:
+        # CircuitPython's string iterator can require a large temporary heap
+        # block.  Indexing one character at a time keeps boot rendering viable
+        # on the fragmented heap left by the e-paper display setup.
+        index = 0
+        while index < len(text):
+            char = text[index]
             code = ord(char) if ord(char) < 384 else ord("?")
             glyph = _SWEET16[code * 16:(code + 1) * 16]
             for row, bits in enumerate(glyph):
                 for col in range(8):
                     if bits & (128 >> col): self.rect(x + col * scale, y + row * scale, scale, scale)
             x += 8 * scale
+            index += 1
 
     def text_bold(self, x, y, text, scale=1):
         """Slight bitmap emboldening without adding a second font asset."""

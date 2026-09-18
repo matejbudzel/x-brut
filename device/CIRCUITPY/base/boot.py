@@ -29,6 +29,9 @@ def _load_project():
 
 def _run():
     conf = read_json(BASE_CONFIG_PATH, {}) or {}
+    # A fresh device has no config yet.  Avoid debug-formatting allocations
+    # during its first display render; users can still enable debug via AP.
+    conf.setdefault("log_level", "info")
     configure(conf)
     info("boot", "run begin log_level=%s" % conf.get("log_level", "debug"))
     from hardware import X4Platform
