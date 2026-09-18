@@ -146,6 +146,13 @@ class Simulator:
         self.ui.read_only = status == "none"
         self.ui.settings(self.project, focus=focus, sd_status=status)
 
+    def show_viewer(self, filename):
+        self.viewer_filename, self.viewer_page = filename, 0
+        path = self.project._path(self.project.DOCUMENTS_PATH + "/" + filename)
+        self.viewer_pages = self.project.page_count(path)
+        self.ui.page, self.ui.actions, self.ui.lines = "viewer", [], []
+        self.project.render_page(self.platform, path, self.viewer_page)
+
     def show_sd_manager(self, focus=0):
         self.settings_focus = focus
         self.manager = SDManager(SIMULATOR_DATA, lambda: self.sd_present and not self.sd_reload_required)
@@ -193,6 +200,15 @@ class Simulator:
             except SDCardError:
                 self.show_home()
             return
+        if self.ui.page == "viewer":
+            if button == "left": self.show_home()
+            elif button in ("up", "side_up", "button_3") and self.viewer_page > 0:
+                self.viewer_page -= 1
+                self.show_viewer_page()
+            elif button in ("down", "side_down", "button_4") and self.viewer_page + 1 < self.viewer_pages:
+                self.viewer_page += 1
+                self.show_viewer_page()
+            return
         if button == "left" and self.ui.page == "home": self.show_settings(); return
         result = self.ui.button(button)
         if result == "back":
@@ -219,6 +235,10 @@ class Simulator:
                 self.ui.show("splash_update", "SPLASH SCREEN", ["SPLASH AVAILABLE"], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
             else:
                 self.ui.show("splash_update", "SPLASH SCREEN", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        elif result == "read_downloaded":
+            self.show_viewer(self.project.document_name(self.current_document_index))
+        elif result and result.startswith("read:"):
+            self.show_viewer(result[5:])
         elif result and result.startswith("document:"):
             index = int(result.split(":", 1)[1]); self.current_document_index = index; url = self.project.config()["document_urls"][index]
             self.ui.show("document", "DOWNLOAD", ["DOWNLOAD", self.project.short_url(url)], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
@@ -239,7 +259,7 @@ class Simulator:
                     url = self.project.config()["document_urls"][self.current_document_index]
                     def progress(percent): self.ui.show("document", "DOWNLOAD", ["DOWNLOADING %d%%" % percent], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
                     info = self.project.download(self.platform, self.current_document_index, progress)
-                    self.ui.show("document", "DOWNLOAD", [("Title: ", info.get("title") or "-"), ("Author: ", info.get("author") or "-")], bottom_labels=("Back", "Read", "", ""), side_labels=("", ""))
+                    self.ui.show("document", "DOWNLOAD", [("Title: ", info.get("title") or "-"), ("Author: ", info.get("author") or "-")], [("READ", "read_downloaded")], ("Back", "Read", "", ""), ("", ""))
                 elif self.ui.page == "splash_update":
                     OTA(self.platform, SIMULATOR_DATA).download_splash(config["splash_url"])
                     self.ui.show("splash_update", "SPLASH SCREEN", ["SPLASH SCREEN REPLACED"], bottom_labels=("Back", "Preview", "", "Revert"), side_labels=("", ""))
@@ -253,6 +273,10 @@ class Simulator:
                 url = locals().get("url", "unknown")
                 log("download failed for %s: %r" % (url, error))
                 self.ui.show(self.ui.page, self.ui.title, ["- FETCH FAILED -"], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
+
+    def show_viewer_page(self):
+        path = self.project._path(self.project.DOCUMENTS_PATH + "/" + self.viewer_filename)
+        self.project.render_page(self.platform, path, self.viewer_page)
 
 
 def handler(sim):

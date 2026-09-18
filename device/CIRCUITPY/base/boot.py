@@ -86,7 +86,11 @@ def _run():
             _home(navigation, ui, project)
         elif ui.page == "home" and button:
             # Project homes use the base's normal cyclic list navigation.
-            ui.button(button)
+            result = ui.button(button)
+            if result and result.startswith("read:"):
+                navigation.update(focus=ui.focus); navigation.push("viewer", {"filename": result[5:]})
+                _viewer_screen(navigation, ui, platform, project, result[5:])
+                ui.home(project, navigation.state.get("focus", 0))
         elif ui.page == "settings" and button:
             result = ui.button(button)
             debug("boot", "settings result=%s" % result)
@@ -328,6 +332,7 @@ def _ap_screen(navigation, ui, platform, project):
 def _document_screen(navigation, ui, platform, project, index):
     url = project.config()["document_urls"][index]
     info("boot", "document screen enter index=%d url=%s" % (index, safe_url(url)))
+    downloaded = False
     ui.show("document", "DOWNLOAD", ["DOWNLOAD", project.short_url(url)], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
     while True:
         button = platform.button()
@@ -337,11 +342,40 @@ def _document_screen(navigation, ui, platform, project, index):
             return
         if button in ("confirm", "button_2"):
             try:
+                if downloaded:
+                    navigation.push("viewer", {"filename": project.document_name(index)})
+                    _viewer_screen(navigation, ui, platform, project, project.document_name(index))
+                    if navigation.route != "document": return
+                    ui.show("document", "DOWNLOAD", [("Title: ", document_info.get("title") or "-"), ("Author: ", document_info.get("author") or "-")], bottom_labels=("Back", "Read", "", ""), side_labels=("", ""))
+                    continue
                 info("boot", "document download begin index=%d" % index)
                 ui.show("document", "DOWNLOAD", ["DOWNLOADING..."])
                 document_info = project.download(platform, index)
+                downloaded = True
                 ui.show("document", "DOWNLOAD", [("Title: ", document_info.get("title") or "-"), ("Author: ", document_info.get("author") or "-")], bottom_labels=("Back", "Read", "", ""), side_labels=("", ""))
                 debug("boot", "document download complete index=%d" % index)
             except Exception as problem:
                 log_error("boot", "document failed: %r" % problem); ui.show("document", "DOWNLOAD", ["- FETCH FAILED -"])
+        time.sleep(0.05)
+
+
+def _viewer_screen(navigation, ui, platform, project, filename):
+    """Run the bare document viewer; it deliberately never invokes BaseUI."""
+    path = project._path(project.DOCUMENTS_PATH + "/" + filename)
+    pages, page = project.page_count(path), 0
+    if pages < 1: raise ValueError("DOCUMENT HAS NO PAGES")
+    ui.page, ui.actions, ui.lines = "viewer", [], []
+    project.render_page(platform, path, page)
+    while True:
+        button = platform.button()
+        if button == "left_long":
+            navigation.home(); ui.home(project)
+            return
+        if button == "left":
+            navigation.back()
+            return
+        if button in ("up", "side_up", "button_3") and page > 0:
+            page -= 1; project.render_page(platform, path, page)
+        elif button in ("down", "side_down", "button_4") and page + 1 < pages:
+            page += 1; project.render_page(platform, path, page)
         time.sleep(0.05)

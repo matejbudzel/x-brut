@@ -31,7 +31,8 @@ class DocumentGridTest(unittest.TestCase):
         self.assertEqual(self.ui.page, "home")
         self.assertEqual(self.ui.focus, 0)
         self.assertIn((32, 79), self.platform.pixels)
-        self.assertEqual(self.ui.actions, [])
+        self.assertEqual(self.ui.actions[0][1], "read:doc-000.xth")
+        self.assertEqual(self.ui.button("confirm"), "read:doc-000.xth")
 
     def test_focus_follows_list_order_wraps_and_scrolls_the_grid(self):
         self.ui.button("down")

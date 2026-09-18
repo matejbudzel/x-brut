@@ -70,10 +70,10 @@ class BaseUI:
         self.platform.refresh()
         debug("ui", "sleeping splash refresh complete")
 
-    def home(self, project=None):
+    def home(self, project=None, focus=0):
         debug("ui", "home requested project=%s" % getattr(project, "PROJECT_NAME", "none"))
         if not self.read_only and project and hasattr(project, "home"):
-            project.home(self)
+            project.home(self, focus)
             return
         project_label = getattr(project, "HOME_ACTION_LABEL", "") if project else ""
         title = getattr(project, "PROJECT_NAME", "xBrut") if project else "xBrut"
@@ -85,9 +85,9 @@ class BaseUI:
         self.page, self.title = "home", title
         self._grid_items = list(documents)
         self.lines = []
-        self.actions = []
+        self.actions = [(name, "read:" + filename) for filename, name in self._grid_items]
         self.focus = min(max(0, focus), len(self._grid_items) - 1) if self._grid_items else 0
-        self.bottom_labels = ("Settings", "", "v" if len(self._grid_items) > 1 else "", "v" if len(self._grid_items) > 1 else "")
+        self.bottom_labels = ("Settings", "Read" if self._grid_items else "", "v" if len(self._grid_items) > 1 else "", "v" if len(self._grid_items) > 1 else "")
         self.side_labels = ("v", "v") if len(self._grid_items) > 1 else ("", "")
         self.frame.clear()
         self.frame.text(CONTENT_X, 22, title, 2)
@@ -194,7 +194,7 @@ class BaseUI:
             elif name in ("down", "side_down", "button_4"):
                 self.focus = (self.focus + 1) % len(self._grid_items)
             elif name in ("confirm", "button_2"):
-                return None
+                return self.actions[self.focus][1]
             else:
                 return None
             self.document_grid(self.title, self._grid_items, self.focus)
