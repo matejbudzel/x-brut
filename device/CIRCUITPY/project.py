@@ -1,5 +1,5 @@
 """xViewer: URL-managed XTC/XTH document library for the X Brut base."""
-import os
+import os, re
 from xbrut_storage import read_json, write_json
 from xbrut_paths import BOOKMARKS_PATH, DATA_ROOT, DOCUMENTS_PATH, PROJECT_CONFIG_PATH, THUMBNAILS_PATH
 
@@ -19,7 +19,16 @@ def _path(path): return path if _ROOT is None else _ROOT + path[len(DATA_ROOT):]
 
 def config():
     value = read_json(_path(PROJECT_CONFIG_PATH), {}) or {}
-    value["document_urls"] = [url for url in value.get("document_urls", []) if url]
+    value["document_urls"] = [url.strip() if isinstance(url, str) and url.strip() else None for url in value.get("document_urls", [])]
+    manifests = []
+    for item in value.get("document_manifests", []):
+        if not isinstance(item, dict): continue
+        url = (item.get("url") or "").strip()
+        if url: manifests.append({"name": (item.get("name") or url).strip(), "url": url})
+    # Read old configurations without requiring an AP settings round trip.
+    legacy = (value.get("document_manifest_url") or "").strip()
+    if not manifests and legacy: manifests.append({"name": "REMOTE DOCS", "url": legacy})
+    value["document_manifests"] = manifests
     return value
 
 
@@ -27,6 +36,81 @@ def save_urls(urls):
     value = config()
     value["document_urls"] = [url.strip() for url in urls if url and url.strip()]
     write_json(_path(PROJECT_CONFIG_PATH), value)
+
+
+def save_manifests(manifests):
+    value = config()
+    value["document_manifests"] = [{"name": (item.get("name") or item.get("url") or "").strip(), "url": item["url"].strip()} for item in manifests if isinstance(item, dict) and (item.get("url") or "").strip()]
+    value.pop("document_manifest_url", None)
+    write_json(_path(PROJECT_CONFIG_PATH), value)
+
+
+def add_url(url):
+    """Add one remote acquisition without duplicating a configured document."""
+    value = config()
+    urls = value["document_urls"]
+    if not any(configured and _url_identity(configured) == _url_identity(url) for configured in urls):
+        urls.append(url)
+        value["document_urls"] = urls
+        write_json(_path(PROJECT_CONFIG_PATH), value)
+
+
+def remove_url(url, delete_download=False):
+    """Unconfigure a URL without shifting other documents' stable file slots."""
+    value = config()
+    for index, configured in enumerate(value["document_urls"]):
+        if not configured or _url_identity(configured) != _url_identity(url): continue
+        value["document_urls"][index] = None
+        write_json(_path(PROJECT_CONFIG_PATH), value)
+        if delete_download:
+            filename = document_name(index)
+            for path in (_path(DOCUMENTS_PATH + "/" + filename), thumbnail_path(filename)):
+                try: os.remove(path)
+                except OSError: pass
+            clear_bookmark(filename)
+        return True
+    return False
+
+
+def has_download(url):
+    """Whether an unconfigured remote item still has local reader data."""
+    for index, configured in enumerate(config()["document_urls"]):
+        if not configured or _url_identity(configured) != _url_identity(url): continue
+        filename = document_name(index)
+        for path in (_path(DOCUMENTS_PATH + "/" + filename), thumbnail_path(filename)):
+            try: os.stat(path); return True
+            except OSError: pass
+    return False
+
+
+def has_url(url):
+    return any(configured and _url_identity(configured) == _url_identity(url) for configured in config()["document_urls"])
+
+
+def _url_identity(url):
+    """Compare URLs regardless of query-parameter ordering in OPDS feeds."""
+    base, separator, query = url.partition("?")
+    return base + separator + "&".join(sorted(query.split("&")))
+
+
+def remote_documents(platform, manifest_index):
+    """Read XTC acquisitions from an OPDS Atom feed, preserving signed URLs."""
+    manifests = config()["document_manifests"]
+    if not 0 <= manifest_index < len(manifests): return []
+    url = manifests[manifest_index]["url"]
+    xml = platform.bytes(url).decode("utf-8", "replace")
+    documents, seen = [], set()
+    for entry in re.findall(r"<entry(?:\s[^>]*)?>(.*?)</entry>", xml, re.I | re.S):
+        title = re.search(r"<title(?:\s[^>]*)?>(.*?)</title>", entry, re.I | re.S)
+        label = re.sub(r"<[^>]+>", "", title.group(1)).strip() if title else "XTC DOCUMENT"
+        for link in re.findall(r"<link\b[^>]*>", entry, re.I):
+            kind = re.search(r"\btype\s*=\s*['\"]([^'\"]+)['\"]", link, re.I)
+            href = re.search(r"\bhref\s*=\s*['\"]([^'\"]+)['\"]", link, re.I)
+            if not kind or not href or kind.group(1).lower() != "application/x-xteink-xtc": continue
+            address = href.group(1).replace("&amp;", "&").replace("&quot;", "\"")
+            if address not in seen:
+                documents.append((label.replace("&amp;", "&"), address)); seen.add(address)
+    return documents
 
 
 def bookmarks():
@@ -62,6 +146,12 @@ def short_url(url, limit=42):
 
 
 def document_name(index): return "doc-%03d.xth" % index
+
+
+def document_index(filename):
+    for index, url in enumerate(config()["document_urls"]):
+        if url and document_name(index) == filename: return index
+    return None
 
 
 THUMB_WIDTH, THUMB_HEIGHT, THUMB_ROW_BYTES = 200, 333, 25

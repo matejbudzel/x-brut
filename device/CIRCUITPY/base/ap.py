@@ -24,7 +24,9 @@ def start(platform):
         value["storage_available"] = sd_available()
         value.setdefault("log_level", "debug")
         import project
-        value["document_urls"] = project.config().get("document_urls", [])
+        project_conf = project.config()
+        value["document_urls"] = project_conf.get("document_urls", [])
+        value["document_manifests"] = project_conf.get("document_manifests", [])
         return JSONResponse(request, value)
 
     @server.route("/api/settings", methods=[POST])
@@ -48,6 +50,9 @@ def start(platform):
             if "document_urls" in value:
                 import project
                 project.save_urls(value["document_urls"])
+            if "document_manifests" in value:
+                import project
+                project.save_manifests(value["document_manifests"])
             return JSONResponse(request, {"ok": True})
         except Exception as error:
             # Keep this log call distinct from the exception variable on CPython.

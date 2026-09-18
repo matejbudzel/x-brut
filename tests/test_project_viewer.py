@@ -114,5 +114,29 @@ class ProjectViewerTest(unittest.TestCase):
         self.assertEqual(chapters, [("Chapter", 6)])
         self.assertEqual(self.project.toc_focus(chapters, 9), 0)
 
+    def test_extracts_only_xtc_opds_acquisitions_and_preserves_query(self):
+        self.values["/sd/project-conf.json"] = {"document_manifests": [{"name": "Current", "url": "https://example.test/opds?key=abc"}]}
+        xml = b'''<feed><entry><title>Daily Digest</title><link type="application/x-xteink-xtc" href="https://docs.test/daily.xtc?key=abc&amp;v=1"/></entry><entry><title>EPUB only</title><link href="https://docs.test/book.epub" type="application/epub+zip"/></entry></feed>'''
+        platform = ModuleType("platform")
+        platform.bytes = lambda url: xml
+        self.assertEqual(self.project.remote_documents(platform, 0), [("Daily Digest", "https://docs.test/daily.xtc?key=abc&v=1")])
+
+    def test_adding_a_remote_url_keeps_existing_documents(self):
+        self.values["/sd/project-conf.json"] = {"document_urls": ["https://docs.test/one.xtc"]}
+        self.project.add_url("https://docs.test/two.xtc")
+        self.project.add_url("https://docs.test/two.xtc")
+        self.assertEqual(self.project.config()["document_urls"], ["https://docs.test/one.xtc", "https://docs.test/two.xtc"])
+
+    def test_opds_url_order_does_not_create_a_duplicate_document(self):
+        self.values["/sd/project-conf.json"] = {"document_urls": ["https://docs.test/book.xtc?release=current&key=abc"]}
+        self.project.add_url("https://docs.test/book.xtc?key=abc&release=current")
+        self.assertEqual(len(self.project.config()["document_urls"]), 1)
+
+    def test_removing_a_remote_url_keeps_other_document_slots_stable(self):
+        self.values["/sd/project-conf.json"] = {"document_urls": ["https://docs.test/one.xtc", "https://docs.test/two.xtc"]}
+        self.assertTrue(self.project.remove_url("https://docs.test/one.xtc"))
+        self.assertEqual(self.project.config()["document_urls"], [None, "https://docs.test/two.xtc"])
+        self.assertEqual(self.project.document_index("doc-001.xth"), 1)
+
 
 if __name__ == "__main__": unittest.main()

@@ -175,9 +175,13 @@ class BaseUI:
         actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap")]
         if project and hasattr(project, "config"):
             urls = project.config().get("document_urls", [])
+            actions.append((project.PROJECT_NAME, "section"))
+            actions.append(("DOWNLOAD ALL", "download_all"))
+            for index, manifest in enumerate(project.config().get("document_manifests", [])):
+                actions.append((manifest["name"].upper(), "remote_docs:%d" % index))
             if urls:
-                actions.append((project.PROJECT_NAME, "section"))
-                for index, url in enumerate(urls): actions.append((project.short_url(url), "document:%d" % index))
+                for index, url in enumerate(urls):
+                    if url: actions.append((project.short_url(url), "document:%d" % index))
         actions.append(("Device", "section"))
         if not self.read_only: actions.append(("MANAGE SD CARD", "manage_sd"))
         actions.extend([("SOFT RELOAD", "soft_reload"), ("HARD RELOAD", "hard_reload"), ("SLEEP", "sleep")])
@@ -245,25 +249,46 @@ class BaseUI:
             self.bottom_labels, self.side_labels = ("Back", "Delete", "v", "v"), ("", "")
         self._battery(); self._labels(); self.platform.refresh()
 
-    def viewer_menu(self, document, chapters, focus):
+    def viewer_menu(self, document, chapters, focus, can_update=False):
         """Overlay a compact metadata and chapter list without viewer chrome."""
         x, y, width, height = 30, 100, 420, 600
         self.frame.rect(x, y, width, height, False); self.frame.outline(x, y, width, height)
         self.frame.text(52, 124, (document.get("title") or "DOCUMENT").upper()[:25], 2)
         self.frame.text(52, 164, ("AUTHOR: " + (document.get("author") or "-")).upper()[:43])
         self.frame.text(52, 184, "PAGES: %d" % document.get("pages", 0))
-        self.frame.text_bold(52, 220, "CONTENTS")
+        if can_update:
+            if focus == 0: self.frame.outline(46, 212, 360, 22)
+            self.frame.text(52, 216, "UPDATE")
+        contents_y = 250 if can_update else 220
+        list_y = contents_y + 30
+        self.frame.text_bold(52, contents_y, "CONTENTS")
         if not chapters:
-            self.frame.text(52, 260, "- NO CHAPTERS -")
+            self.frame.text(52, list_y + 10, "- NO CHAPTERS -")
         else:
-            visible = 17
-            start = max(0, min(focus - visible // 2, max(0, len(chapters) - visible)))
+            visible, chapter_focus = 16 if can_update else 17, focus - 1 if can_update else focus
+            start = max(0, min(chapter_focus - visible // 2, max(0, len(chapters) - visible)))
             for offset, chapter in enumerate(chapters[start:start + visible]):
-                index, row_y = start + offset, 250 + offset * 24
-                if index == focus: self.frame.outline(46, row_y - 4, 360, 22)
+                index, row_y = start + offset, list_y + offset * 24
+                if index == chapter_focus: self.frame.outline(46, row_y - 4, 360, 22)
                 self.frame.text(52, row_y, chapter[0].upper()[:42])
             if len(chapters) > visible:
                 thumb_height = max(12, visible * 24 * visible // len(chapters))
-                top = 250 + (visible * 24 - thumb_height) * start // max(1, len(chapters) - visible)
+                top = list_y + (visible * 24 - thumb_height) * start // max(1, len(chapters) - visible)
                 self.frame.rect(420, top, 5, thumb_height)
         self.platform.refresh()
+
+    def remote_remove_modal(self, name, focus=0):
+        """Draw a choice box over the retained remote-document list."""
+        self.page, self.focus = "remote_remove", focus
+        self.actions = [("KEEP FILE", "keep"), ("DELETE FILE", "delete")]
+        self.bottom_labels, self.side_labels = ("Cancel", "Choose", "v", "v"), ("", "")
+        x, y, width, height = 30, 290, 420, 190
+        self.frame.rect(x, y, width, height, False); self.frame.outline(x, y, width, height)
+        self.frame.text(52, 320, "REMOVE DOCUMENT", 2)
+        self.frame.text(52, 360, name.upper()[:42])
+        self.frame.text(52, 388, "KEEP DOWNLOADED FILE?")
+        for index, label in enumerate(("KEEP FILE", "DELETE FILE")):
+            row_y = 420 + index * 28
+            if index == focus: self.frame.outline(46, row_y - 5, 360, 22)
+            self.frame.text(52, row_y, label)
+        self._battery(); self._labels(); self.platform.refresh()

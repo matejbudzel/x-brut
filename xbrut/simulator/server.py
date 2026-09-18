@@ -73,7 +73,13 @@ def ap_handler():
             if self.path == "/api/settings":
                 value = read_config(); project.set_root(SIMULATOR_DATA)
                 value.setdefault("log_level", "debug")
-                value["document_urls"] = project.config().get("document_urls", [])
+                # The shared AP page disables every field when this is absent
+                # or false.  Simulator project data is always backed by its
+                # writable .simulator directory, unless SD was toggled out.
+                value["storage_available"] = True
+                project_conf = project.config()
+                value["document_urls"] = project_conf.get("document_urls", [])
+                value["document_manifests"] = project_conf.get("document_manifests", [])
                 return self.json(200, value)
             self.send_error(404)
         def do_POST(self):
@@ -91,6 +97,9 @@ def ap_handler():
                 if "document_urls" in incoming:
                     project.set_root(SIMULATOR_DATA)
                     project.save_urls(incoming["document_urls"])
+                if "document_manifests" in incoming:
+                    project.set_root(SIMULATOR_DATA)
+                    project.save_manifests(incoming["document_manifests"])
             except Exception as error:
                 log("settings save failed: %r" % error); self.json(400, {"ok": False, "error": str(error)})
         def log_message(self, format_string, *args): log("ap: " + format_string % args)
@@ -177,6 +186,7 @@ class Simulator:
         self.viewer_pages = self.project.page_count(path)
         self.viewer_page = min(self.project.bookmark(filename), self.viewer_pages - 1)
         self.viewer_chapters = self.project.toc(path)
+        self.viewer_update_index = self.project.document_index(filename)
         self.viewer_menu_open = False
         self.ui.page, self.ui.actions, self.ui.lines = "viewer", [], []
         self.project.render_page(self.platform, path, self.viewer_page)
@@ -229,6 +239,17 @@ class Simulator:
             except SDCardError:
                 self.show_home()
             return
+        remove_index = getattr(self, "remote_remove_index", None)
+        if remove_index is not None and self.ui.page == "remote_remove":
+            if button in ("left", "left_long"):
+                self.remote_remove_index = None; self.show_remote_document_list(); return
+            if button in ("up", "side_up", "button_3", "down", "side_down", "button_4"):
+                self.remote_remove_focus = 1 - self.remote_remove_focus
+                self.ui.remote_remove_modal(self.remote_documents[remove_index][0], self.remote_remove_focus)
+            elif button in ("confirm", "button_2"):
+                self.project.remove_url(self.remote_documents[remove_index][1], self.remote_remove_focus == 1)
+                self.remote_remove_index = None; self.show_remote_document_list()
+            return
         if self.ui.page == "viewer":
             if button == "left":
                 if self.viewer_menu_open:
@@ -238,19 +259,23 @@ class Simulator:
                     self.project.save_bookmark(self.viewer_filename, self.viewer_page)
                     self.show_home()
             elif self.viewer_menu_open:
-                if button in ("up", "side_up", "button_3") and self.viewer_chapters:
-                    self.viewer_chapter_focus = (self.viewer_chapter_focus - 1) % len(self.viewer_chapters)
+                menu_items = len(self.viewer_chapters) + (1 if self.viewer_update_index is not None else 0)
+                if button in ("up", "side_up", "button_3") and menu_items:
+                    self.viewer_chapter_focus = (self.viewer_chapter_focus - 1) % menu_items
                     self.show_viewer_menu()
-                elif button in ("down", "side_down", "button_4") and self.viewer_chapters:
-                    self.viewer_chapter_focus = (self.viewer_chapter_focus + 1) % len(self.viewer_chapters)
+                elif button in ("down", "side_down", "button_4") and menu_items:
+                    self.viewer_chapter_focus = (self.viewer_chapter_focus + 1) % menu_items
                     self.show_viewer_menu()
+                elif button in ("confirm", "button_2") and self.viewer_update_index is not None and self.viewer_chapter_focus == 0:
+                    self.start_viewer_update()
                 elif button in ("confirm", "button_2") and self.viewer_chapters:
-                    self.viewer_page = min(self.viewer_chapters[self.viewer_chapter_focus][1], self.viewer_pages - 1)
+                    chapter = self.viewer_chapter_focus - 1 if self.viewer_update_index is not None else self.viewer_chapter_focus
+                    self.viewer_page = min(self.viewer_chapters[chapter][1], self.viewer_pages - 1)
                     self.viewer_menu_open = False
                     self.show_viewer_page()
             elif button in ("confirm", "button_2"):
                 self.viewer_menu_open = True
-                self.viewer_chapter_focus = self.project.toc_focus(self.viewer_chapters, self.viewer_page)
+                self.viewer_chapter_focus = self.project.toc_focus(self.viewer_chapters, self.viewer_page) + (1 if self.viewer_update_index is not None else 0)
                 self.show_viewer_menu()
             elif button in ("up", "side_up", "button_3") and self.viewer_page > 0:
                 self.viewer_page -= 1
@@ -260,11 +285,17 @@ class Simulator:
                 self.show_viewer_page()
             return
         if button == "left" and self.ui.page == "home": self.show_settings(); return
+        if getattr(self, "viewer_update_pending", False) and self.ui.page == "document":
+            if button in ("left", "confirm", "button_2"):
+                self.viewer_update_pending = False
+                self.show_viewer(self.viewer_filename)
+            return
         result = self.ui.button(button)
         if result == "back":
             if self.ui.page == "ota": self.show_settings()
             elif self.ui.page == "ap": self.stop_ap(); self.show_settings(2)
             elif self.ui.page == "splash_update": self.show_settings(1)
+            elif self.ui.page in ("remote_docs", "download_all"): self.show_settings(self.settings_focus)
             else: self.show_home()
             return
         if result in ("soft_reload", "hard_reload"):
@@ -285,6 +316,27 @@ class Simulator:
                 self.ui.show("splash_update", "SPLASH SCREEN", ["SPLASH AVAILABLE"], [("DOWNLOAD", "download")], ("Back", "Start", "", ""), ("", ""))
             else:
                 self.ui.show("splash_update", "SPLASH SCREEN", ["NO SOURCE URL PROVIDED.", "CONFIGURE ONE VIA AP MODE."], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        elif result and result.startswith("remote_docs:"):
+            self.settings_focus = self.ui.focus
+            self.show_remote_docs(int(result.split(":", 1)[1]))
+        elif result == "download_all":
+            self.settings_focus = self.ui.focus
+            self.download_all()
+        elif result == "fetch":
+            self.fetch_remote_docs()
+        elif result and result.startswith("add:"):
+            self.project.add_url(self.remote_documents[int(result.split(":", 1)[1])][1])
+            self.show_remote_document_list()
+        elif result and result.startswith("remove:"):
+            self.remote_remove_index = int(result.split(":", 1)[1])
+            name = self.remote_documents[self.remote_remove_index][0]
+            url = self.remote_documents[self.remote_remove_index][1]
+            if self.project.has_download(url):
+                self.remote_remove_focus = 0; self.ui.remote_remove_modal(name, self.remote_remove_focus)
+            else:
+                self.project.remove_url(url); self.remote_remove_index = None; self.show_remote_document_list()
+        elif getattr(self, "remote_documents", None) and self.ui.page == "remote_docs":
+            self.show_remote_document_list()
         elif result == "read_downloaded":
             self.show_viewer(self.project.document_name(self.current_document_index))
         elif result and result.startswith("read:"):
@@ -330,7 +382,59 @@ class Simulator:
 
     def show_viewer_menu(self):
         path = self.project._path(self.project.DOCUMENTS_PATH + "/" + self.viewer_filename)
-        self.ui.viewer_menu(self.project.metadata(path), self.viewer_chapters, self.viewer_chapter_focus)
+        self.ui.viewer_menu(self.project.metadata(path), self.viewer_chapters, self.viewer_chapter_focus, self.viewer_update_index is not None)
+
+    def start_viewer_update(self):
+        self.viewer_update_pending = True
+        self.ui.show("document", "DOWNLOAD", ["DOWNLOADING..."], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        try:
+            info = self.project.download(self.platform, self.viewer_update_index)
+            self.ui.show("document", "DOWNLOAD", [("Title: ", info.get("title") or "-"), ("Author: ", info.get("author") or "-")], bottom_labels=("Back", "Read", "", ""), side_labels=("", ""))
+        except Exception as error:
+            self.viewer_update_pending = False
+            log("viewer update failed: %r" % error)
+            self.show_viewer_page()
+
+    def show_remote_docs(self, manifest_index):
+        self.remote_manifest_index = manifest_index
+        if not 0 <= manifest_index < len(self.project.config().get("document_manifests", [])):
+            self.ui.show("remote_docs", "REMOTE DOCS", ["- NO MANIFEST URL -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        else:
+            name = self.project.config()["document_manifests"][manifest_index]["name"].upper()
+            self.ui.show("remote_docs", "REMOTE DOCS", [name, "REMOTE DOCUMENTS"], [("FETCH LIST", "fetch")], ("Back", "Fetch", "", ""), ("", ""))
+
+    def show_remote_document_list(self):
+        name = self.project.config()["document_manifests"][self.remote_manifest_index]["name"].upper()
+        actions = []
+        for index, (title, url) in enumerate(self.remote_documents):
+            added = self.project.has_url(url)
+            actions.append((("[x] " if added else "[ ] ") + title, ("remove:" if added else "add:") + str(index)))
+        focus = min(max(0, self.ui.focus), len(actions) - 1) if actions else 0
+        active = actions[focus][1] if actions else ""
+        self.ui.show("remote_docs", "REMOTE DOCS", [name, "REMOTE DOCUMENTS"], actions, ("Back", "Remove" if active.startswith("remove:") else "Add", "v", "v"), ("", ""), focus)
+
+    def fetch_remote_docs(self):
+        name = self.project.config()["document_manifests"][self.remote_manifest_index]["name"].upper()
+        self.ui.show("remote_docs", "REMOTE DOCS", [name, "- FETCHING LIST -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        try:
+            self.remote_documents = self.project.remote_documents(self.platform, self.remote_manifest_index)
+            if self.remote_documents: self.show_remote_document_list()
+            else: self.ui.show("remote_docs", "REMOTE DOCS", [name, "- NO XTC DOCUMENTS -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        except Exception as error:
+            log("remote document list failed: %r" % error)
+            self.show_remote_docs(self.remote_manifest_index)
+
+    def download_all(self):
+        urls, failed = [(index, url) for index, url in enumerate(self.project.config().get("document_urls", [])) if url], 0
+        if not urls:
+            self.ui.show("download_all", "DOWNLOAD ALL", ["- NO DOCUMENTS -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+            return
+        for order, (index, url) in enumerate(urls):
+            self.ui.show("download_all", "DOWNLOAD ALL", ["DOWNLOADING %d/%d" % (order + 1, len(urls)), self.project.short_url(url)], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+            try: self.project.download(self.platform, index)
+            except Exception as error:
+                failed += 1; log("download all item %d failed: %r" % (index, error))
+        self.ui.show("download_all", "DOWNLOAD ALL", ["DONE" if not failed else "DONE - %d FAILED" % failed], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
 
 
 def handler(sim):

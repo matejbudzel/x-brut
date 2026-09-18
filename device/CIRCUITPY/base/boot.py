@@ -103,6 +103,12 @@ def _run():
             elif result == "ap":
                 navigation.update(focus=ui.focus); navigation.push("ap")
                 _ap_screen(navigation, ui, platform, project)
+            elif result and result.startswith("remote_docs:"):
+                navigation.update(focus=ui.focus); navigation.push("remote_docs", {"index": int(result.split(":", 1)[1])})
+                _remote_docs_screen(navigation, ui, platform, project, navigation.state["index"])
+            elif result == "download_all":
+                navigation.update(focus=ui.focus); navigation.push("download_all")
+                _download_all_screen(navigation, ui, platform, project)
             elif result == "manage_sd":
                 navigation.update(focus=ui.focus); navigation.push("sd_manager")
                 _sd_manager_screen(navigation, ui, platform, project)
@@ -359,6 +365,94 @@ def _document_screen(navigation, ui, platform, project, index):
         time.sleep(0.05)
 
 
+def _remote_docs_screen(navigation, ui, platform, project, manifest_index):
+    """Fetch an OPDS feed on demand and add its XTC acquisitions to xViewer."""
+    manifests = project.config().get("document_manifests", [])
+    if not 0 <= manifest_index < len(manifests):
+        ui.show("remote_docs", "REMOTE DOCS", ["- NO MANIFEST URL -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        while True:
+            button = platform.button()
+            if button in ("left", "left_long"):
+                _leave(navigation, ui, project, button)
+                return
+            time.sleep(0.05)
+    title = manifests[manifest_index]["name"].upper()
+    ui.show("remote_docs", "REMOTE DOCS", [title, "REMOTE DOCUMENTS"], [("FETCH LIST", "fetch")], ("Back", "Fetch", "", ""), ("", ""))
+    documents = None
+    while True:
+        button = platform.button()
+        if button in ("left", "left_long"):
+            _leave(navigation, ui, project, button)
+            return
+        result = ui.button(button) if button else None
+        if result == "fetch":
+            ui.show("remote_docs", "REMOTE DOCS", ["- FETCHING LIST -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+            try:
+                documents = project.remote_documents(platform, manifest_index)
+                if documents:
+                    _remote_document_list(ui, project, title, documents)
+                else:
+                    ui.show("remote_docs", "REMOTE DOCS", [title, "- NO XTC DOCUMENTS -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+            except Exception as problem:
+                log_error("boot", "remote document list failed: %r" % problem)
+                ui.show("remote_docs", "REMOTE DOCS", [title, "- FETCH FAILED -"], [("FETCH LIST", "fetch")], ("Back", "Fetch", "", ""), ("", ""))
+        elif result and result.startswith("add:"):
+            project.add_url(documents[int(result.split(":", 1)[1])][1])
+            _remote_document_list(ui, project, title, documents, ui.focus)
+        elif result and result.startswith("remove:"):
+            index = int(result.split(":", 1)[1])
+            url = documents[index][1]
+            project.remove_url(url, _remove_document_modal(ui, platform, documents[index][0]) if project.has_download(url) else False)
+            _remote_document_list(ui, project, title, documents, ui.focus)
+        elif documents:
+            # BaseUI redraws after movement; restore the checkbox-aware labels.
+            _remote_document_list(ui, project, title, documents, ui.focus)
+        time.sleep(0.05)
+
+
+def _remote_document_list(ui, project, title, documents, focus=0):
+    actions = []
+    for index, (name, url) in enumerate(documents):
+        added = project.has_url(url)
+        actions.append((("[x] " if added else "[ ] ") + name, ("remove:" if added else "add:") + str(index)))
+    active = actions[min(max(0, focus), len(actions) - 1)][1] if actions else ""
+    ui.show("remote_docs", "REMOTE DOCS", [title, "REMOTE DOCUMENTS"], actions, ("Back", "Remove" if active.startswith("remove:") else "Add", "v", "v"), ("", ""), focus)
+
+
+def _remove_document_modal(ui, platform, name):
+    """Ask whether unconfiguring this URL should also delete its local copy."""
+    focus = 0
+    ui.remote_remove_modal(name, focus)
+    while True:
+        button = platform.button()
+        if button in ("left", "left_long"): return False
+        if button in ("up", "side_up", "button_3", "down", "side_down", "button_4"):
+            focus = 1 - focus; ui.remote_remove_modal(name, focus)
+        elif button in ("confirm", "button_2"): return focus == 1
+        time.sleep(0.05)
+
+
+def _download_all_screen(navigation, ui, platform, project):
+    """Refresh every configured document in order using the normal downloader."""
+    urls = [(index, url) for index, url in enumerate(project.config().get("document_urls", [])) if url]
+    if not urls:
+        ui.show("download_all", "DOWNLOAD ALL", ["- NO DOCUMENTS -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+    else:
+        failed = 0
+        for order, (index, url) in enumerate(urls):
+            ui.show("download_all", "DOWNLOAD ALL", ["DOWNLOADING %d/%d" % (order + 1, len(urls)), project.short_url(url)], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+            try: project.download(platform, index)
+            except Exception as problem:
+                failed += 1; log_error("boot", "download all item %d failed: %r" % (index, problem))
+        ui.show("download_all", "DOWNLOAD ALL", ["DONE" if not failed else "DONE - %d FAILED" % failed], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+    while True:
+        button = platform.button()
+        if button in ("left", "left_long"):
+            _leave(navigation, ui, project, button)
+            return
+        time.sleep(0.05)
+
+
 def _viewer_screen(navigation, ui, platform, project, filename):
     """Run the bare document viewer; it deliberately never invokes BaseUI."""
     path = project._path(project.DOCUMENTS_PATH + "/" + filename)
@@ -367,7 +461,7 @@ def _viewer_screen(navigation, ui, platform, project, filename):
     if page >= pages: page = 0
     ui.page, ui.actions, ui.lines = "viewer", [], []
     project.render_page(platform, path, page)
-    chapters, menu_open, chapter_focus = project.toc(path), False, 0
+    chapters, update_index, menu_open, chapter_focus = project.toc(path), project.document_index(filename), False, 0
     while True:
         button = platform.button()
         if button == "left_long":
@@ -382,22 +476,49 @@ def _viewer_screen(navigation, ui, platform, project, filename):
             navigation.back()
             return
         if menu_open:
-            if button in ("up", "side_up", "button_3") and chapters:
-                chapter_focus = (chapter_focus - 1) % len(chapters)
-                ui.viewer_menu(project.metadata(path), chapters, chapter_focus)
-            elif button in ("down", "side_down", "button_4") and chapters:
-                chapter_focus = (chapter_focus + 1) % len(chapters)
-                ui.viewer_menu(project.metadata(path), chapters, chapter_focus)
+            menu_items = len(chapters) + (1 if update_index is not None else 0)
+            if button in ("up", "side_up", "button_3") and menu_items:
+                chapter_focus = (chapter_focus - 1) % menu_items
+                ui.viewer_menu(project.metadata(path), chapters, chapter_focus, update_index is not None)
+            elif button in ("down", "side_down", "button_4") and menu_items:
+                chapter_focus = (chapter_focus + 1) % menu_items
+                ui.viewer_menu(project.metadata(path), chapters, chapter_focus, update_index is not None)
+            elif button in ("confirm", "button_2") and update_index is not None and chapter_focus == 0:
+                if _viewer_update(ui, platform, project, update_index):
+                    pages, page = project.page_count(path), 0
+                    chapters, update_index, menu_open, chapter_focus = project.toc(path), project.document_index(filename), False, 0
+                    project.render_page(platform, path, page)
+                else:
+                    menu_open = False; project.render_page(platform, path, page)
             elif button in ("confirm", "button_2") and chapters:
-                page = min(chapters[chapter_focus][1], pages - 1)
+                chapter = chapter_focus - 1 if update_index is not None else chapter_focus
+                page = min(chapters[chapter][1], pages - 1)
                 menu_open = False; project.render_page(platform, path, page)
             continue
         if button in ("confirm", "button_2"):
-            menu_open = True; chapter_focus = project.toc_focus(chapters, page)
-            ui.viewer_menu(project.metadata(path), chapters, chapter_focus)
+            menu_open = True; chapter_focus = project.toc_focus(chapters, page) + (1 if update_index is not None else 0)
+            ui.viewer_menu(project.metadata(path), chapters, chapter_focus, update_index is not None)
             continue
         if button in ("up", "side_up", "button_3") and page > 0:
             page -= 1; project.render_page(platform, path, page)
         elif button in ("down", "side_down", "button_4") and page + 1 < pages:
             page += 1; project.render_page(platform, path, page)
+        time.sleep(0.05)
+
+
+def _viewer_update(ui, platform, project, index):
+    """Fetch from the viewer menu, then treat Back and Read as fresh reading."""
+    url = project.config()["document_urls"][index]
+    ui.show("document", "DOWNLOAD", ["DOWNLOADING...", project.short_url(url)], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+    try:
+        info = project.download(platform, index)
+        ui.show("document", "DOWNLOAD", [("Title: ", info.get("title") or "-"), ("Author: ", info.get("author") or "-")], bottom_labels=("Back", "Read", "", ""), side_labels=("", ""))
+    except Exception as problem:
+        log_error("boot", "viewer update failed: %r" % problem)
+        ui.show("document", "DOWNLOAD", ["- FETCH FAILED -"], bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+        return False
+    while True:
+        button = platform.button()
+        if button in ("left", "confirm", "button_2"): return True
+        if button == "left_long": return False
         time.sleep(0.05)

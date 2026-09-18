@@ -31,6 +31,8 @@ button { padding:0 .8rem; }
     <option value="off">Off</option>
   </select>
   <h2>xViewer</h2>
+  <div id="manifests"></div>
+  <button class="wide" type="button" id="add-manifest">Add OPDS feed</button>
   <div id="urls"></div>
   <button class="wide" type="button" id="add">Add URL</button>
   <p><button>Save</button> <span id="status"></span></p>
@@ -38,6 +40,7 @@ button { padding:0 .8rem; }
 <script>
 const form = document.querySelector('#settings');
 const urls = document.querySelector('#urls');
+const manifests = document.querySelector('#manifests');
 function sync() { urls.querySelectorAll('button').forEach(b => b.disabled = urls.children.length === 1); }
 function addUrl(value) {
   const row = document.createElement('div'), input = document.createElement('input'), remove = document.createElement('button');
@@ -46,14 +49,24 @@ function addUrl(value) {
   row.append(input, remove); urls.append(row); sync();
 }
 document.querySelector('#add').onclick = () => addUrl('');
+function addManifest(value = {}) {
+  const row = document.createElement('div'), name = document.createElement('input'), url = document.createElement('input'), remove = document.createElement('button');
+  row.className = 'url'; name.value = value.name || ''; name.placeholder = 'Feed name'; name.className = 'manifest-name';
+  url.value = value.url || ''; url.placeholder = 'OPDS acquisition feed URL'; url.className = 'manifest-url';
+  remove.type = 'button'; remove.textContent = 'Remove'; remove.onclick = () => row.remove();
+  row.append(name, url, remove); manifests.append(row);
+}
+document.querySelector('#add-manifest').onclick = () => addManifest();
 fetch('/api/settings').then(r => r.json()).then(data => {
   Object.keys(data).forEach(key => { if (form[key]) form[key].value = data[key]; });
+  (data.document_manifests || []).forEach(addManifest);
   (data.document_urls || []).forEach(addUrl); if (!urls.children.length) addUrl('');
   if (!data.storage_available) { document.querySelector('#status').textContent = 'No SD card: settings and downloads are unavailable.'; form.querySelectorAll('input, select, button').forEach(e => e.disabled = true); }
 });
 form.onsubmit = event => {
   event.preventDefault(); const value = Object.fromEntries(new FormData(form));
   value.document_urls = [...urls.querySelectorAll('input')].map(input => input.value.trim()).filter(Boolean);
+  value.document_manifests = [...manifests.children].map(row => ({name: row.querySelector('.manifest-name').value.trim(), url: row.querySelector('.manifest-url').value.trim()})).filter(item => item.url);
   fetch('/api/settings', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(value)})
     .then(r => r.json()).then(data => document.querySelector('#status').textContent = data.ok ? 'saved' : data.error);
 };
