@@ -46,13 +46,13 @@ class Framebuffer:
         # screen with no recoverable event loop.
         import gc
         gc.collect()
-        # CircuitPython's string iterator can require a large temporary heap
-        # block.  Indexing one character at a time keeps boot rendering viable
-        # on the fragmented heap left by the e-paper display setup.
+        # CircuitPython string iteration/indexing can require a large temporary
+        # heap block.  Render compact ASCII bytes instead; byte indexing yields
+        # an integer without allocating a one-character string.
+        text = text.encode()
         index = 0
         while index < len(text):
-            char = text[index]
-            code = ord(char) if ord(char) < 384 else ord("?")
+            code = text[index]
             glyph = _SWEET16[code * 16:(code + 1) * 16]
             for row, bits in enumerate(glyph):
                 for col in range(8):
