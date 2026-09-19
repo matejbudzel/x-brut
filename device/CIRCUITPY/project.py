@@ -1,5 +1,5 @@
 """xViewer: URL-managed XTC/XTH document library for the X Brut base."""
-import os, re
+import os
 from xbrut_storage import read_json, write_json
 from xbrut_paths import BOOKMARKS_PATH, DATA_ROOT, DOCUMENTS_PATH, PROJECT_CONFIG_PATH, THUMBNAILS_PATH
 
@@ -100,17 +100,40 @@ def remote_documents(platform, manifest_index):
     url = manifests[manifest_index]["url"]
     xml = platform.bytes(url).decode("utf-8", "replace")
     documents, seen = [], set()
-    for entry in re.findall(r"<entry(?:\s[^>]*)?>(.*?)</entry>", xml, re.I | re.S):
-        title = re.search(r"<title(?:\s[^>]*)?>(.*?)</title>", entry, re.I | re.S)
-        label = re.sub(r"<[^>]+>", "", title.group(1)).strip() if title else "XTC DOCUMENT"
-        for link in re.findall(r"<link\b[^>]*>", entry, re.I):
-            kind = re.search(r"\btype\s*=\s*['\"]([^'\"]+)['\"]", link, re.I)
-            href = re.search(r"\bhref\s*=\s*['\"]([^'\"]+)['\"]", link, re.I)
-            if not kind or not href or kind.group(1).lower() != "application/x-xteink-xtc": continue
-            address = href.group(1).replace("&amp;", "&").replace("&quot;", "\"")
-            if address not in seen:
+    for entry in xml.split("<entry")[1:]:
+        entry = entry.split("</entry>", 1)[0]
+        label = _element(entry, "title") or "XTC DOCUMENT"
+        start = 0
+        while True:
+            start = entry.find("<link", start)
+            if start < 0: break
+            end = entry.find(">", start)
+            if end < 0: break
+            link, start = entry[start:end + 1], end + 1
+            if _attribute(link, "type").lower() != "application/x-xteink-xtc": continue
+            address = _attribute(link, "href").replace("&amp;", "&").replace("&quot;", "\"")
+            if address and address not in seen:
                 documents.append((label.replace("&amp;", "&"), address)); seen.add(address)
     return documents
+
+
+def _element(source, name):
+    start = source.find("<" + name)
+    if start < 0: return ""
+    start = source.find(">", start)
+    if start < 0: return ""
+    end = source.find("</" + name + ">", start)
+    return source[start + 1:end].strip() if end >= 0 else ""
+
+
+def _attribute(source, name):
+    for quote in ('"', "'"):
+        marker = name + "=" + quote
+        start = source.find(marker)
+        if start >= 0:
+            start += len(marker); end = source.find(quote, start)
+            return source[start:end] if end >= 0 else ""
+    return ""
 
 
 def bookmarks():
