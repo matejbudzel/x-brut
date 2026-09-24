@@ -81,6 +81,9 @@ Retain application logic in Python and port it incrementally onto `xbrut_x4`:
 storage/path plumbing, input adaptation, navigation/UI, reader formats, then
 network/OPDS. The initial storage/path/log/navigation/SD-tree adapters are in
 `native/micropython/base/` and have been serial-tested against the X4 SD card.
+`xbrut_boot.py` also carries the portable boot policy: project loading, route
+history, and normalized button-to-action handoff. The concrete UI, display,
+sleep, reload, and network operations remain platform-specific callers.
 
 Keep the validation browser as the active device smoke app until equivalent
 portrait UI coverage exists. The current native landscape renderer is known
