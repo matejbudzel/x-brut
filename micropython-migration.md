@@ -25,6 +25,7 @@ Validated on `/dev/ttyACM0`:
 - `native/micropython/xbrut_x4/`: native SPI/SD/panel/GPIO/ADC/framebuffer
   module.
 - `native/micropython/app/`: validation browser and calibrated input decoder.
+- `native/micropython/base/`: incremental MicroPython ports of base modules.
 - `tools/build-micropython-x4.sh`, `tools/deploy-micropython-x4.sh`: build and
   app-partition deployment commands.
 
@@ -58,6 +59,12 @@ verifies its hash, restores the validation app, and leaves bootloader and
 partition table untouched. Run `TMPDIR=$PWD/.tmp-validate tools/validate.sh`
 before deploying Python changes.
 
+When adding or removing a native-module public name, perform a clean firmware
+build before flashing (`ninja -C /build/micropython-x4/ports/esp32/build-XBRUT_X4
+-t clean`). MicroPython's generated QSTR/module registry otherwise can become
+out of sync with old objects; the symptom is standard imports resolving to an
+unrelated module (for example `import os` becoming `osdebug`).
+
 ## Display rules
 
 - First frame after boot is full two-plane refresh.
@@ -72,5 +79,11 @@ before deploying Python changes.
 
 Retain application logic in Python and port it incrementally onto `xbrut_x4`:
 storage/path plumbing, input adaptation, navigation/UI, reader formats, then
-network/OPDS. Keep the validation browser as a smoke app until equivalent
-coverage exists in the migrated application.
+network/OPDS. The initial storage/path/log/navigation/SD-tree adapters are in
+`native/micropython/base/` and have been serial-tested against the X4 SD card.
+
+Keep the validation browser as the active device smoke app until equivalent
+portrait UI coverage exists. The current native landscape renderer is known
+good; the separate portrait adapter is intentionally not the boot app yet and
+must not prompt further panel-driver changes without an isolated hardware
+diagnostic.

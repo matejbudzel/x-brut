@@ -1,0 +1,11 @@
+"""Filesystem locations: code in flash, all X Brut mutable state on SD."""
+
+DATA_ROOT = "/sd"
+BASE_CONFIG_PATH = DATA_ROOT + "/base-conf.json"
+PROJECT_CONFIG_PATH = DATA_ROOT + "/project-conf.json"
+LOG_PATH = DATA_ROOT + "/base.log"
+FRAME_PATH = DATA_ROOT + "/.xbrut-frame.bmp"
+SPLASH_PATH = DATA_ROOT + "/splash.bin"
+DOCUMENTS_PATH = DATA_ROOT + "/xviewer-docs"
+BOOKMARKS_PATH = DATA_ROOT + "/xviewer-bookmarks.json"
+THUMBNAILS_PATH = DATA_ROOT + "/xviewer-thumbnails"
