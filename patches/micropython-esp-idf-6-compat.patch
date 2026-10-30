@@ -1,0 +1,24 @@
+From: X Brut MicroPython build compatibility
+Subject: [PATCH] esp32: use esp_libc with ESP-IDF 6
+
+ESP-IDF 6 renamed the `newlib` component to `esp_libc`.  The X4 build
+environment provides ESP-IDF 6, so use the current component name.
+
+--- a/ports/esp32/esp32_common.cmake
++++ b/ports/esp32/esp32_common.cmake
+@@ -189,7 +189,7 @@ idf_component_register(
+     lwip
+     mbedtls
+-    newlib
++    esp_libc
+     nvs_flash
+    sdmmc
+    spi_flash
+
+@@ -196,7 +196,6 @@ idf_component_register(
+     soc
+     spi_flash
+     ulp
+-    usb
+     vfs
+ )

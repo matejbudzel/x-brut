@@ -10,10 +10,18 @@ class X4Platform:
     def __init__(self):
         # type: () -> None
         info("hardware", "X4Platform init begin")
-        self.display = board.DISPLAY
-        debug("hardware", "display=%s size=%sx%s" % (type(self.display).__name__, self.display.width, self.display.height))
-        self.display.rotation = 270
-        debug("hardware", "display rotation=270")
+        try:
+            import xbrut_epd  # type: ignore
+            self._epd = xbrut_epd
+            self._native = True
+            self.display = None
+            info("hardware", "native SSD1677 presenter enabled")
+        except ImportError:
+            self._epd = None
+            self._native = False
+            self.display = board.DISPLAY
+            debug("hardware", "display=%s size=%sx%s" % (type(self.display).__name__, self.display.width, self.display.height))
+            self.display.rotation = 270
         self._back_pending = False
         self._back_long_emitted = False
         self._frame_path = FRAME_PATH
@@ -29,7 +37,7 @@ class X4Platform:
             palette[0], palette[1] = 0xffffff, 0
             self._group = displayio.Group()
             self._group.append(displayio.TileGrid(self._ram_bitmap, pixel_shader=palette))
-            self.display.root_group = self._group
+            self.display.root_group = self._group  # type: ignore
             from adafruit_xteink_x4 import InputManager
             self.buttons = InputManager()
             from adafruit_xteink_x4 import BatteryMonitor
@@ -45,6 +53,11 @@ class X4Platform:
     def _open_file_frame(self):
         debug("hardware", "opening framebuffer %s" % self._frame_path)
         self._frame = open(self._frame_path, "w+b")
+        if self._native:
+            # Physical 800x480 SSD1677 frame, 100 bytes per row.
+            for row in range(480): self._frame.write(b"\0" * 100)
+            self.clear(); self._frame.flush()
+            return
         # 480x800, 1-bit BMP. Rows are 60 bytes and naturally 4-byte aligned.
         self._frame.write(
             b"BM" + (48062).to_bytes(4, "little") + b"\0\0\0\0" + (62).to_bytes(4, "little") +
@@ -58,11 +71,14 @@ class X4Platform:
         self._bitmap = displayio.OnDiskBitmap(self._frame_path)
         self._group = displayio.Group()
         self._group.append(displayio.TileGrid(self._bitmap, pixel_shader=self._bitmap.pixel_shader))
-        self.display.root_group = self._group
+        self.display.root_group = self._group  # type: ignore
         debug("hardware", "display root_group installed")
     def _row_offset(self, y):
         # type: (int) -> int
         return 62 + (799 - y) * 60
+    def _physical(self, x, y):
+        # Portrait UI -> physical 800x480 panel, matching former rotation=270.
+        return y, 479 - x
     def _write_row(self, y, row):
         # type: (int, bytes) -> None
         self._frame.seek(self._row_offset(y)); self._frame.write(row)
@@ -72,14 +88,21 @@ class X4Platform:
         if self._ram_mode:
             self._ram_bitmap.fill(0)
             return
-        for y in range(800): self._write_row(y, b"\0" * 60)
+        if self._native:
+            for y in range(480): self._frame.seek(y * 100); self._frame.write(b"\0" * 100)
+        else:
+            for y in range(800): self._write_row(y, b"\0" * 60)
         debug("hardware", "framebuffer clear complete")
     def pixel(self, x, y, on=True):
         # type: (int, int, bool) -> None
         if self._ram_mode:
             self._ram_bitmap[x, y] = 1 if on else 0
             return
-        offset, mask = self._row_offset(y) + x // 8, 128 >> (x & 7)
+        if self._native:
+            x, y = self._physical(x, y)
+            offset, mask = y * 100 + x // 8, 128 >> (x & 7)
+        else:
+            offset, mask = self._row_offset(y) + x // 8, 128 >> (x & 7)
         self._frame.seek(offset); value = self._frame.read(1)[0]
         self._frame.seek(offset); self._frame.write(bytes((value | mask if on else value & ~mask,)))
     def blit(self, x, y, width, height, packed):
@@ -91,6 +114,12 @@ class X4Platform:
                 for column in range(width):
                     if packed[row * source_row + column // 8] & (128 >> (column & 7)):
                         self._ram_bitmap[x + column, y + row] = 1
+            return
+        if self._native:
+            for row in range(height):
+                for column in range(width):
+                    if packed[row * source_row + column // 8] & (128 >> (column & 7)):
+                        self.pixel(x + column, y + row)
             return
         target_width = (width + shift + 7) // 8
         for row in range(height):
@@ -106,6 +135,10 @@ class X4Platform:
         if on:
             for row in range(height):
                 for column in range(width): self.pixel(x + column, y + row)
+            return
+        if self._native:
+            for row in range(height):
+                for column in range(width): self.pixel(x + column, y + row, on)
             return
         if self._ram_mode:
             for row in range(height):
@@ -132,8 +165,10 @@ class X4Platform:
                     self._ram_bitmap[x, y] = 1 if packed[y * 60 + x // 8] & (128 >> (x & 7)) else 0
             self.refresh()
             return
+        self.clear()
         for y in range(800):
-            self._write_row(y, packed[y * 60:(y + 1) * 60])
+            for x in range(480):
+                if packed[y * 60 + x // 8] & (128 >> (x & 7)): self.pixel(x, y)
         self.refresh()
         debug("hardware", "present complete")
     def present_file(self, path):
@@ -146,25 +181,29 @@ class X4Platform:
                 if len(row) != 60:
                     error("hardware", "present_file invalid row=%d bytes=%d" % (y, len(row)))
                     raise ValueError("invalid framebuffer size")
-                self._write_row(y, row)
+                for x in range(480):
+                    if row[x // 8] & (128 >> (x & 7)): self.pixel(x, y)
         self.refresh()
         debug("hardware", "present_file complete %s" % path)
     def refresh(self):
         # type: () -> None
-        debug("hardware", "refresh begin time_to_refresh=%s busy=%s" % (self.display.time_to_refresh, self.display.busy))
+        if self._native:
+            self._frame.flush(); self._frame.seek(0); self._epd.refresh(self._frame)  # type: ignore
+            return
+        debug("hardware", "refresh begin time_to_refresh=%s busy=%s" % (self.display.time_to_refresh, self.display.busy))  # type: ignore
         if not self._ram_mode: self._frame.flush()
         import time
-        if self.display.time_to_refresh > 0:
+        if self.display.time_to_refresh > 0:  # type: ignore
             # Give the controller a small margin: its reported cooldown can
             # round down just enough for the next refresh to be rejected.
-            time.sleep(self.display.time_to_refresh + 0.05)
-        try: self.display.refresh()
+            time.sleep(self.display.time_to_refresh + 0.05)  # type: ignore
+        try: self.display.refresh()  # type: ignore
         except Exception as problem:
             if "Refresh too soon" not in str(problem):
                 error("hardware", "refresh failed: %r" % problem)
                 raise
-            time.sleep(max(0.05, self.display.time_to_refresh + 0.05))
-            self.display.refresh()
+            time.sleep(max(0.05, self.display.time_to_refresh + 0.05))  # type: ignore
+            self.display.refresh()  # type: ignore
         debug("hardware", "refresh complete")
     def button(self):
         self.buttons.update()

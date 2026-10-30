@@ -27,7 +27,7 @@
 #define X4_PANEL_CS_GPIO GPIO_NUM_21
 #define X4_SPI_HOST SPI2_HOST
 #define X4_FRAME_BYTES (800 * 480 / 8)
-#define X4_PANEL_CHUNK_BYTES 1024
+#define X4_PANEL_CHUNK_BYTES 4092
 #define X4_BATTERY_ADC_UNIT ADC_UNIT_1
 #define X4_BATTERY_ADC_CHANNEL ADC_CHANNEL_0
 #define X4_BUTTONS_LEFT_ADC_CHANNEL ADC_CHANNEL_1
@@ -98,7 +98,14 @@ static void x4_panel_tx(bool data, const uint8_t *buf, size_t len) {
 }
 static void x4_cmd(uint8_t byte) { x4_panel_tx(false, &byte, 1); }
 static void x4_byte(uint8_t byte) { x4_panel_tx(true, &byte, 1); }
-static void x4_data(const uint8_t *buf, size_t len) { while (len) { size_t n = len > X4_PANEL_CHUNK_BYTES ? X4_PANEL_CHUNK_BYTES : len; x4_panel_tx(true, buf, n); buf += n; len -= n; } }
+static void x4_data(const uint8_t *buf, size_t len) {
+    while (len) {
+        size_t n = len > X4_PANEL_CHUNK_BYTES ? X4_PANEL_CHUNK_BYTES : len;
+        x4_panel_tx(true, buf, n);
+        buf += n;
+        len -= n;
+    }
+}
 // The X4's SSD1677 holds BUSY high while a reset or display update is in
 // progress.  Fixed delays are not safe here: panel timing varies with
 // temperature, and the RED-RAM sync must not begin until a differential pass
@@ -225,6 +232,38 @@ static mp_obj_t xbrut_x4_framebuffer_rect(size_t n_args, const mp_obj_t *args) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(xbrut_x4_framebuffer_rect_obj, 4, 4, xbrut_x4_framebuffer_rect);
+static mp_obj_t xbrut_x4_framebuffer_fill_rect(size_t n_args, const mp_obj_t *args) {
+    mp_int_t x = mp_obj_get_int(args[0]), y = mp_obj_get_int(args[1]);
+    mp_int_t width = mp_obj_get_int(args[2]), height = mp_obj_get_int(args[3]);
+    bool black = mp_obj_is_true(args[4]);
+    if (width <= 0 || height <= 0) return mp_const_none;
+    mp_int_t x_end = x + width, y_end = y + height;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x_end > 800) x_end = 800;
+    if (y_end > 480) y_end = 480;
+    if (x >= x_end || y >= y_end) return mp_const_none;
+    for (; y < y_end; ++y) {
+        uint8_t *row = panel_framebuffer + y * 100;
+        for (mp_int_t column = x; column < x_end; ++column) {
+            uint8_t mask = 0x80 >> (column & 7);
+            if (black) row[column >> 3] &= (uint8_t)~mask;
+            else row[column >> 3] |= mask;
+        }
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(xbrut_x4_framebuffer_fill_rect_obj, 5, 5, xbrut_x4_framebuffer_fill_rect);
+static mp_obj_t xbrut_x4_framebuffer_present_full(void) {
+    if (framebuffer_update_pending) mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("framebuffer update pending"));
+    x4_panel_init();
+    x4_write_framebuffer_plane(0x24);
+    x4_write_framebuffer_plane(0x26);
+    x4_activate_full();
+    panel_has_frame = true;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_framebuffer_present_full_obj, xbrut_x4_framebuffer_present_full);
 static mp_obj_t xbrut_x4_framebuffer_present(void) {
     if (framebuffer_update_pending) mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("framebuffer update pending"));
     if (!panel_has_frame) {
@@ -257,7 +296,7 @@ static mp_obj_t xbrut_x4_framebuffer_ready(void) {
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_framebuffer_ready_obj, xbrut_x4_framebuffer_ready);
 static mp_obj_t xbrut_x4_sleep(void) { x4_check(esp_deep_sleep_enable_gpio_wakeup(1ULL << X4_POWER_BUTTON_GPIO, ESP_GPIO_WAKEUP_GPIO_LOW)); esp_deep_sleep_start(); return mp_const_none; }
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_sleep_obj, xbrut_x4_sleep);
-static const mp_rom_map_elem_t xbrut_x4_globals_table[] = {{MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_xbrut_x4)}, {MP_ROM_QSTR(MP_QSTR_init), MP_ROM_PTR(&xbrut_x4_init_obj)}, {MP_ROM_QSTR(MP_QSTR_SDCard), MP_ROM_PTR(&xbrut_x4_sdcard_obj)}, {MP_ROM_QSTR(MP_QSTR_power_button), MP_ROM_PTR(&xbrut_x4_power_button_obj)}, {MP_ROM_QSTR(MP_QSTR_usb_present), MP_ROM_PTR(&xbrut_x4_usb_present_obj)}, {MP_ROM_QSTR(MP_QSTR_adc_raw), MP_ROM_PTR(&xbrut_x4_adc_raw_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_reset), MP_ROM_PTR(&xbrut_x4_panel_reset_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_clear), MP_ROM_PTR(&xbrut_x4_panel_clear_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_refresh), MP_ROM_PTR(&xbrut_x4_panel_refresh_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_refresh_fast), MP_ROM_PTR(&xbrut_x4_panel_refresh_fast_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_clear), MP_ROM_PTR(&xbrut_x4_framebuffer_clear_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_rect), MP_ROM_PTR(&xbrut_x4_framebuffer_rect_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_present), MP_ROM_PTR(&xbrut_x4_framebuffer_present_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_ready), MP_ROM_PTR(&xbrut_x4_framebuffer_ready_obj)}, {MP_ROM_QSTR(MP_QSTR_sleep), MP_ROM_PTR(&xbrut_x4_sleep_obj)}};
+static const mp_rom_map_elem_t xbrut_x4_globals_table[] = {{MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_xbrut_x4)}, {MP_ROM_QSTR(MP_QSTR_init), MP_ROM_PTR(&xbrut_x4_init_obj)}, {MP_ROM_QSTR(MP_QSTR_SDCard), MP_ROM_PTR(&xbrut_x4_sdcard_obj)}, {MP_ROM_QSTR(MP_QSTR_power_button), MP_ROM_PTR(&xbrut_x4_power_button_obj)}, {MP_ROM_QSTR(MP_QSTR_usb_present), MP_ROM_PTR(&xbrut_x4_usb_present_obj)}, {MP_ROM_QSTR(MP_QSTR_adc_raw), MP_ROM_PTR(&xbrut_x4_adc_raw_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_reset), MP_ROM_PTR(&xbrut_x4_panel_reset_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_clear), MP_ROM_PTR(&xbrut_x4_panel_clear_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_refresh), MP_ROM_PTR(&xbrut_x4_panel_refresh_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_refresh_fast), MP_ROM_PTR(&xbrut_x4_panel_refresh_fast_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_clear), MP_ROM_PTR(&xbrut_x4_framebuffer_clear_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_rect), MP_ROM_PTR(&xbrut_x4_framebuffer_rect_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_fill_rect), MP_ROM_PTR(&xbrut_x4_framebuffer_fill_rect_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_present_full), MP_ROM_PTR(&xbrut_x4_framebuffer_present_full_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_present), MP_ROM_PTR(&xbrut_x4_framebuffer_present_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_ready), MP_ROM_PTR(&xbrut_x4_framebuffer_ready_obj)}, {MP_ROM_QSTR(MP_QSTR_sleep), MP_ROM_PTR(&xbrut_x4_sleep_obj)}};
 static MP_DEFINE_CONST_DICT(xbrut_x4_globals, xbrut_x4_globals_table);
 const mp_obj_module_t xbrut_x4_module = {.base = {&mp_type_module}, .globals = (mp_obj_dict_t *)&xbrut_x4_globals};
 MP_REGISTER_MODULE(MP_QSTR_xbrut_x4, xbrut_x4_module);

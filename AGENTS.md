@@ -14,6 +14,18 @@ app-only serial deployment path; never erase or reflash firmware unless the
 user explicitly requests it. If host `/tmp` is full, create an ignored
 workspace temporary directory and invoke validation with `TMPDIR` set there.
 
+## X4 firmware builds
+
+The host root filesystem and `/tmp` are intentionally space-constrained. Use
+the `/build` virtual disk for all CircuitPython firmware builds: it has the
+working ESP-IDF toolchain in `/build/idf-tools`, its Python environment in
+`/build/idf-python`, and the reusable X4 build directory in
+`/build/circuitpython-x4`. Build with `PATH=/build/idf-tools/tools/riscv32-esp-elf/esp-15.2.0_20251204/riscv32-esp-elf/bin:/home/matej/.local/bin:$PATH`,
+`IDF_TOOLS_PATH=/build/idf-tools`, `PYTHON=/build/idf-python/bin/python`,
+`TMPDIR=/build/tmp`, and `BUILD=/build/circuitpython-x4`. Do not put ESP-IDF
+downloads, toolchains, or firmware build artefacts under the repository or
+`/tmp`.
+
 Internal CircuitPython flash is for application code and libraries. Keep all
 X Brut-managed mutable state under the microSD `/sd` mount via
 `device/CIRCUITPY/base/xbrut_paths.py`; never add a fallback that writes logs,
