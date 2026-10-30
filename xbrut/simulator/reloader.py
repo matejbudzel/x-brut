@@ -17,6 +17,7 @@ def _newest(paths):
 
 def run(arguments, paths):
     command = [sys.executable, "-m", "xbrut.simulator.server", "--worker", "--host", arguments.host, "--port", str(arguments.port), "--ap-host", arguments.ap_host, "--ap-port", str(arguments.ap_port)]
+    if arguments.portrait: command.append("--portrait")
     known = _newest(paths)
     child = None
     try:

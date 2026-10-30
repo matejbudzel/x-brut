@@ -1,9 +1,8 @@
 """Calibrated, debounced X4 ADC-ladder input.
 
-The two resistor ladders are not capable of unambiguous chords.  This module
-therefore emits a press only when exactly one calibrated button is close to
-the observed values; simultaneous or unknown readings are deliberately
-ignored.
+Unknown/out-of-band readings are ignored. The two independent ladders can
+report simultaneous presses. Same-ladder chords cannot be identified reliably;
+readings outside calibrated single-button ranges are rejected.
 """
 import json
 import time
@@ -12,13 +11,25 @@ DEBOUNCE_MS = 20
 
 
 class Input:
-    def __init__(self, hardware, path="/sd/button-calibration.json"):
+    def __init__(self, hardware, path="/sd/button-calibration.json", clock=None, config=None):
         self.hardware = hardware
-        with open(path) as handle:
-            config = json.load(handle)
+        self.clock = clock or time
+        if config is None:
+            with open(path) as handle:
+                config = json.load(handle)
         self.baseline = config["baseline"]
         self.buttons = config["buttons"]
-        now = time.ticks_ms()
+        self.ranges = {}
+        for channel in ("left", "right"):
+            values = [(name, item["raw"]) for name, item in self.buttons.items() if item["channel"] == channel]
+            ranges = []
+            for name, raw in values:
+                distances = [abs(raw - other) for other_name, other in values if other_name != name]
+                tolerance = min(300, min(distances) // 2 - 20 if distances else 300)
+                if tolerance <= 0: raise ValueError("button calibration overlaps")
+                ranges.append((name, raw, tolerance))
+            self.ranges[channel] = ranges
+        now = self.clock.ticks_ms()
         self.active = {"left": None, "right": None}
         self.candidate = {"left": None, "right": None}
         self.candidate_since = {"left": now, "right": now}
@@ -30,18 +41,10 @@ class Input:
         # neighbours cannot overlap on a normal single-button press.
         if abs(value - baseline) <= 100:
             return None
-        options = [(abs(value - item["raw"]), name)
-                   for name, item in self.buttons.items()
-                   if item["channel"] == channel]
-        if not options:
-            return None
-        distance, name = min(options)
-        values = sorted(item["raw"] for item in self.buttons.values()
-                        if item["channel"] == channel)
-        raw = self.buttons[name]["raw"]
-        neighbours = [abs(raw - other) for other in values if other != raw]
-        tolerance = min(300, min(neighbours) // 2 - 20 if neighbours else 300)
-        return name if distance <= tolerance else None
+        for name, raw, tolerance in self.ranges[channel]:
+            if abs(value - raw) <= tolerance:
+                return name
+        return None
 
     def _readings(self):
         _, left, right = self.hardware.adc_raw()
@@ -59,7 +62,7 @@ class Input:
         press and release even when a display refresh delays the next sample.
         """
         readings = self._readings()
-        now = time.ticks_ms()
+        now = self.clock.ticks_ms()
         changes = []
         for channel in ("left", "right"):
             reading = readings[channel]
@@ -67,10 +70,50 @@ class Input:
                 self.candidate[channel] = reading
                 self.candidate_since[channel] = now
                 continue
-            if time.ticks_diff(now, self.candidate_since[channel]) < DEBOUNCE_MS:
+            if self.clock.ticks_diff(now, self.candidate_since[channel]) < DEBOUNCE_MS:
                 continue
             if reading != self.active[channel]:
                 previous = self.active[channel]
                 self.active[channel] = reading
                 changes.append((channel, previous, reading))
         return changes, dict(self.active)
+
+
+class Actions:
+    """Physical transitions to logical actions; no auto-repeat or display calls."""
+    NAMES = {"lower-2": "confirm", "lower-3": "up", "lower-4": "down",
+             "side-1": "up", "side-2": "down"}
+
+    def __init__(self, controls, clock=None, back_ms=700):
+        self.controls = controls
+        self.clock = clock or time
+        self.back_ms = back_ms
+        self.back_since = None
+        self.back_long = False
+        self.power_candidate = self.power_active = False
+        self.power_since = self.clock.ticks_ms()
+
+    def poll(self):
+        changes, _states = self.controls.poll()
+        now = self.clock.ticks_ms()
+        events = []
+        for _channel, previous, current in changes:
+            if previous == "lower-1" and current != previous and self.back_since is not None:
+                if not self.back_long:
+                    events.append("left_long" if self.clock.ticks_diff(now, self.back_since) >= self.back_ms else "left")
+                self.back_since = None
+                self.back_long = False
+            if current == "lower-1":
+                self.back_since, self.back_long = now, False
+            elif current in self.NAMES:
+                events.append(self.NAMES[current])
+        if self.back_since is not None and not self.back_long and self.clock.ticks_diff(now, self.back_since) >= self.back_ms:
+            self.back_long = True
+            events.append("left_long")
+        power = bool(self.controls.hardware.power_button())
+        if power != self.power_candidate:
+            self.power_candidate, self.power_since = power, now
+        elif power != self.power_active and self.clock.ticks_diff(now, self.power_since) >= DEBOUNCE_MS:
+            self.power_active = power
+            if power: events.append("power")
+        return events

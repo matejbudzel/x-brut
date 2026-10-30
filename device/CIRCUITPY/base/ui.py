@@ -7,20 +7,43 @@ CONTENT_X = 18
 
 class BaseUI:
     """Reusable base screen template and deterministic button navigation."""
-    def __init__(self, platform):
+    def __init__(self, platform, deferred=False):
         self.platform, self.frame, self.page, self.focus = platform, Framebuffer(platform), "home", 0
         self.lines, self.actions = [], []
         self._grid_items = []
         self.title = "xBrut"
         self.bottom_labels, self.side_labels = ("", "", "", ""), ("", "")
         self.read_only = False
+        self.deferred, self._drawing, self._pending = deferred, False, None
         debug("ui", "BaseUI initialized")
+
+    @property
+    def pending(self):
+        return self._pending is not None
+
+    def _defer(self, method, args):
+        if self.deferred and not self._drawing:
+            self._pending = (method, args)
+            return True
+        return False
+
+    def render_pending(self):
+        if self._pending is None: return False
+        method, args = self._pending
+        self._pending = None
+        self._drawing = True
+        try:
+            method(*args)
+        finally:
+            self._drawing = False
+        return True
 
     def show(self, page, title, lines=(), actions=(), bottom_labels=("Back", "Open", "v", "v"), side_labels=("v", "v"), focus=0):
         info("ui", "show page=%s title=%s focus=%d lines=%d actions=%d" % (page, title, focus, len(lines), len(actions)))
         self.page, self.title, self.focus, self.lines, self.actions = page, title, focus, list(lines), list(actions)
         self._grid_items = []
         self.bottom_labels, self.side_labels = bottom_labels, side_labels
+        if self._defer(self.show, (page, title, self.lines, self.actions, bottom_labels, side_labels, focus)): return
         self.frame.clear(); self.frame.text(CONTENT_X, 22, title, 2)
         y = 82
         for line in self.lines:
@@ -53,6 +76,7 @@ class BaseUI:
         """Fallback splash when no downloaded raw splash is installed."""
         info("ui", "show sleeping splash project=%s" % (project_name or "-"))
         self.page, self.actions, self.lines = "splash", [], []
+        if self._defer(self.splash, (project_name,)): return
         self.frame.clear()
         # Sweet16 Mono is eight pixels wide per glyph. Keep title/name centered
         # as a single visual block even when only the default xBrut is shown.
@@ -89,6 +113,7 @@ class BaseUI:
         self.focus = min(max(0, focus), len(self._grid_items) - 1) if self._grid_items else 0
         self.bottom_labels = ("Settings", "Read" if self._grid_items else "", "v" if len(self._grid_items) > 1 else "", "v" if len(self._grid_items) > 1 else "")
         self.side_labels = ("v", "v") if len(self._grid_items) > 1 else ("", "")
+        if self._defer(self.document_grid, (title, self._grid_items, self.focus)): return
         self.frame.clear()
         self.frame.text(CONTENT_X, 22, title, 2)
         if not self._grid_items:
@@ -226,6 +251,7 @@ class BaseUI:
     def sd_manager(self, manager):
         """Render the compact scrollable SD tree without generic action rows."""
         self.page, self.title = "sd_manager", "SD CARD"
+        if self._defer(self.sd_manager, (manager,)): return
         self.frame.clear(); self.frame.text(CONTENT_X, 22, self.title, 2)
         rows, focus, visible = manager.rows, manager.focus, 21
         start = max(0, min(focus - visible // 2, max(0, len(rows) - visible)))
@@ -251,6 +277,7 @@ class BaseUI:
 
     def viewer_menu(self, document, chapters, focus, can_update=False):
         """Overlay a compact metadata and chapter list without viewer chrome."""
+        if self._defer(self.viewer_menu, (document, chapters, focus, can_update)): return
         x, y, width, height = 30, 100, 420, 600
         self.frame.rect(x, y, width, height, False); self.frame.outline(x, y, width, height)
         self.frame.text(52, 124, (document.get("title") or "DOCUMENT").upper()[:25], 2)

@@ -90,3 +90,16 @@ portrait UI coverage exists. The current native landscape renderer is known
 good; the separate portrait adapter is intentionally not the boot app yet and
 must not prompt further panel-driver changes without an isolated hardware
 diagnostic.
+
+## October 30 portrait stabilization
+
+Failed CircuitPython/native-EPD and blocking portrait experiments are archived
+on `archive/pre-mvp-experiments-2026-10-30`. Main now contains a separately
+validated portrait adapter and cooperative UI runtime; the panel transport and
+waveforms remain those of the working browser checkpoint. The active browser
+is still the default deployment payload. See
+[portrait validation and staging](docs/micropython-portrait.md).
+
+The desktop suite now exercises the actual migrated input, boot policy,
+storage/logger, deferred UI, and runtime, and compiles/tests the production
+raster C header. It still cannot certify electrical or visible panel behavior.

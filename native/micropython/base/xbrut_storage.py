@@ -24,14 +24,11 @@ def mount_sd():
         _vfs = os.VfsFat(_sd)
         os.mount(_vfs, DATA_ROOT)
     except OSError as problem:
-        # Already mounted is safe after a soft reset; all other errors leave
-        # storage unavailable and never redirect writes to internal flash.
-        try:
-            os.stat(DATA_ROOT)
-        except OSError:
-            _sd = _vfs = None
-            print("X Brut: microSD unavailable: %r" % problem)
-            return False
+        # A directory named /sd is not evidence of a mounted card. Fail
+        # closed so a mount error can never enable internal-flash writes.
+        _sd = _vfs = None
+        print("X Brut: microSD unavailable: %r" % problem)
+        return False
     try:
         with open(BASE_CONFIG_PATH) as handle:
             configure(json.load(handle))
@@ -69,7 +66,7 @@ def read_json(path, default=None):
 
 
 def _sd_path(path):
-    if not path.startswith(DATA_ROOT + "/"):
+    if not path.startswith(DATA_ROOT + "/") or any(part in ("", ".", "..") for part in path[len(DATA_ROOT) + 1:].split("/")):
         raise ValueError("mutable X Brut state must be under /sd")
 
 

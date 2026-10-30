@@ -8,7 +8,6 @@ import gc
 from navigation import Navigation
 from xbrut_log import configure, debug, error as log_error, info
 from xbrut_paths import BASE_CONFIG_PATH
-from xbrut_storage import read_json, sd_available, sd_card_status
 
 
 def load_project(root=""):
@@ -32,25 +31,29 @@ def load_project(root=""):
 
 class BootController:
     """Base route policy; renderer and hardware calls stay in the caller."""
-    def __init__(self, ui, project_loader=load_project):
+    def __init__(self, ui, project_loader=load_project, storage=None):
+        if storage is None:
+            import xbrut_storage
+            storage = xbrut_storage
+        self.storage = storage
         self.ui = ui
         self.project_loader = project_loader
         self.project = None
         self.navigation = Navigation("home")
 
     def start(self):
-        conf = read_json(BASE_CONFIG_PATH, {}) or {}
+        conf = self.storage.read_json(BASE_CONFIG_PATH, {}) or {}
         conf.setdefault("log_level", "info")
         configure(conf)
         self.project = self.project_loader()
-        self.ui.read_only = not sd_available()
+        self.ui.read_only = not self.storage.sd_available()
         gc.collect()
         self.ui.home(self.project)
         info("boot", "base home ready")
         return self.project
 
     def _settings(self, focus=0):
-        self.ui.settings(self.project, focus=focus, sd_status=sd_card_status())
+        self.ui.settings(self.project, focus=focus, sd_status=self.storage.sd_card_status())
 
     def _home(self):
         self.navigation.home()
@@ -64,6 +67,13 @@ class BootController:
             self._settings(entry["state"].get("focus", 0))
         else:
             self.ui.home(self.project, entry["state"].get("focus", 0))
+
+    def unavailable(self, action):
+        """Fallback for handoffs not implemented by the portrait checkpoint."""
+        if action in ("sleep", "soft_reload", "hard_reload"):
+            self.navigation.update(focus=self.ui.focus)
+            self.navigation.push("unavailable")
+        self.ui.show("unavailable", "UNAVAILABLE", ["PRESS BACK TO RETURN"], bottom_labels=("Back", "", "", ""))
 
     def handle(self, button):
         """Apply one normalized button event and return an external action.
@@ -80,6 +90,7 @@ class BootController:
             return "render"
         if button == "left":
             if self.navigation.route == "home":
+                self.navigation.update(focus=self.ui.focus)
                 self.navigation.push("settings", {"focus": 0})
                 self._settings()
             else:

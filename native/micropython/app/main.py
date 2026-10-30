@@ -47,6 +47,9 @@ class Frame:
         self.clear()
 
     def clear(self):
+        # Calibration/status screens also respect async frame ownership.
+        while not xbrut_x4.framebuffer_ready():
+            time.sleep_ms(10)
         xbrut_x4.framebuffer_clear()
 
     def pixel(self, x, y):

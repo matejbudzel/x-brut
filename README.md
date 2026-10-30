@@ -5,6 +5,29 @@ owns recovery, power, splash, settings, Wi-Fi setup and OTA.  A separately
 downloaded `project.py` owns the reader itself; the first project will be an
 XTH-only viewer.
 
+## Migration status
+
+The supported development direction is MicroPython with the native X4 panel/SD
+module. The last device-confirmed baseline is the landscape validation browser.
+The full CircuitPython reader below remains a reference implementation.
+
+The new portrait checkpoint shares its UI, boot controller, and cooperative
+render loop with a desktop preview:
+
+```sh
+python3 run_simulator.py --portrait
+```
+
+Put `.xtc`/`.xth` files in `.simulator/xviewer-docs/` to exercise the library.
+This checkpoint covers portrait drawing, library focus, settings, Back/long
+Back, and queued input during display BUSY. Reader, network, and sleep actions
+are still migration handoffs and show an unavailable screen. The preview
+simulates a 250 ms panel update; it does not predict physical refresh timing.
+
+See [portrait validation and staging](docs/micropython-portrait.md) before
+using this checkpoint on hardware. The default simulator and default firmware
+deployment payload still use their existing paths.
+
 ## Run the simulator
 
 ```sh

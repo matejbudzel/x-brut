@@ -5,3 +5,6 @@ base.log
 .simulator/
 .tools/
 backups/
+
+.tmp-cp-build/
+.tmp-validate/

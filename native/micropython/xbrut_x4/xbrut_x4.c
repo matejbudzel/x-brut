@@ -1,6 +1,7 @@
 // X Brut X4 hardware support for MicroPython. SPI2 is initialised here once:
 // SD and the SSD1677 are individual devices and every transfer releases it.
 #include <string.h>
+#include "raster.h"
 #include "py/mphal.h"
 #include "py/mperrno.h"
 #include "py/obj.h"
@@ -203,28 +204,43 @@ static mp_obj_t xbrut_x4_panel_refresh_fast(mp_obj_t stream) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(xbrut_x4_panel_refresh_fast_obj, xbrut_x4_panel_refresh_fast);
+static void x4_framebuffer_writable(void) {
+    if (framebuffer_update_pending) mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("framebuffer update pending"));
+}
 static mp_obj_t xbrut_x4_framebuffer_clear(void) {
+    x4_framebuffer_writable();
     memset(panel_framebuffer, 0xff, sizeof(panel_framebuffer));
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_framebuffer_clear_obj, xbrut_x4_framebuffer_clear);
 static mp_obj_t xbrut_x4_framebuffer_rect(size_t n_args, const mp_obj_t *args) {
-    mp_int_t x = mp_obj_get_int(args[0]), y = mp_obj_get_int(args[1]);
-    mp_int_t width = mp_obj_get_int(args[2]), height = mp_obj_get_int(args[3]);
-    if (width <= 0 || height <= 0) return mp_const_none;
-    mp_int_t x_end = x + width, y_end = y + height;
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    if (x_end > 800) x_end = 800;
-    if (y_end > 480) y_end = 480;
-    if (x >= x_end || y >= y_end) return mp_const_none;
-    for (; y < y_end; ++y) {
-        uint8_t *row = panel_framebuffer + y * 100;
-        for (mp_int_t column = x; column < x_end; ++column) row[column >> 3] &= (uint8_t)~(0x80 >> (column & 7));
-    }
+    x4_framebuffer_writable();
+    x4_raster_rect(panel_framebuffer, mp_obj_get_int(args[0]), mp_obj_get_int(args[1]),
+        mp_obj_get_int(args[2]), mp_obj_get_int(args[3]), true);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(xbrut_x4_framebuffer_rect_obj, 4, 4, xbrut_x4_framebuffer_rect);
+static mp_obj_t xbrut_x4_framebuffer_fill_rect(size_t n_args, const mp_obj_t *args) {
+    x4_framebuffer_writable();
+    x4_raster_rect(panel_framebuffer, mp_obj_get_int(args[0]), mp_obj_get_int(args[1]),
+        mp_obj_get_int(args[2]), mp_obj_get_int(args[3]), mp_obj_is_true(args[4]));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(xbrut_x4_framebuffer_fill_rect_obj, 5, 5, xbrut_x4_framebuffer_fill_rect);
+static mp_obj_t xbrut_x4_framebuffer_blit_portrait(size_t n_args, const mp_obj_t *args) {
+    x4_framebuffer_writable();
+    mp_int_t width = mp_obj_get_int(args[2]), height = mp_obj_get_int(args[3]);
+    mp_buffer_info_t source;
+    mp_get_buffer_raise(args[4], &source, MP_BUFFER_READ);
+    // Check multiplication without overflow, even for malformed input.
+    if (width <= 0 || height <= 0) return mp_const_none;
+    size_t stride = ((size_t)width + 7) / 8;
+    if ((size_t)height > source.len / stride) mp_raise_ValueError(MP_ERROR_TEXT("short bitmap"));
+    x4_raster_blit_portrait(panel_framebuffer, mp_obj_get_int(args[0]), mp_obj_get_int(args[1]),
+        width, height, source.buf);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(xbrut_x4_framebuffer_blit_portrait_obj, 5, 5, xbrut_x4_framebuffer_blit_portrait);
 static mp_obj_t xbrut_x4_framebuffer_present(void) {
     if (framebuffer_update_pending) mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("framebuffer update pending"));
     if (!panel_has_frame) {
@@ -245,6 +261,7 @@ static mp_obj_t xbrut_x4_framebuffer_present(void) {
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_framebuffer_present_obj, xbrut_x4_framebuffer_present);
 static mp_obj_t xbrut_x4_framebuffer_ready(void) {
     if (!framebuffer_update_pending) return mp_const_true;
+    if (mp_hal_ticks_ms() - framebuffer_update_started >= 30000) mp_raise_OSError(MP_ETIMEDOUT);
     if (gpio_get_level(X4_PANEL_BUSY_GPIO)) framebuffer_busy_seen = true;
     // BUSY can assert a few milliseconds after MASTER_ACTIVATION.  Do not
     // mistake that short low interval for completion.
@@ -257,7 +274,25 @@ static mp_obj_t xbrut_x4_framebuffer_ready(void) {
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_framebuffer_ready_obj, xbrut_x4_framebuffer_ready);
 static mp_obj_t xbrut_x4_sleep(void) { x4_check(esp_deep_sleep_enable_gpio_wakeup(1ULL << X4_POWER_BUTTON_GPIO, ESP_GPIO_WAKEUP_GPIO_LOW)); esp_deep_sleep_start(); return mp_const_none; }
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_sleep_obj, xbrut_x4_sleep);
-static const mp_rom_map_elem_t xbrut_x4_globals_table[] = {{MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_xbrut_x4)}, {MP_ROM_QSTR(MP_QSTR_init), MP_ROM_PTR(&xbrut_x4_init_obj)}, {MP_ROM_QSTR(MP_QSTR_SDCard), MP_ROM_PTR(&xbrut_x4_sdcard_obj)}, {MP_ROM_QSTR(MP_QSTR_power_button), MP_ROM_PTR(&xbrut_x4_power_button_obj)}, {MP_ROM_QSTR(MP_QSTR_usb_present), MP_ROM_PTR(&xbrut_x4_usb_present_obj)}, {MP_ROM_QSTR(MP_QSTR_adc_raw), MP_ROM_PTR(&xbrut_x4_adc_raw_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_reset), MP_ROM_PTR(&xbrut_x4_panel_reset_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_clear), MP_ROM_PTR(&xbrut_x4_panel_clear_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_refresh), MP_ROM_PTR(&xbrut_x4_panel_refresh_obj)}, {MP_ROM_QSTR(MP_QSTR_panel_refresh_fast), MP_ROM_PTR(&xbrut_x4_panel_refresh_fast_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_clear), MP_ROM_PTR(&xbrut_x4_framebuffer_clear_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_rect), MP_ROM_PTR(&xbrut_x4_framebuffer_rect_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_present), MP_ROM_PTR(&xbrut_x4_framebuffer_present_obj)}, {MP_ROM_QSTR(MP_QSTR_framebuffer_ready), MP_ROM_PTR(&xbrut_x4_framebuffer_ready_obj)}, {MP_ROM_QSTR(MP_QSTR_sleep), MP_ROM_PTR(&xbrut_x4_sleep_obj)}};
+static const mp_rom_map_elem_t xbrut_x4_globals_table[] = {
+    {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_xbrut_x4)},
+    {MP_ROM_QSTR(MP_QSTR_init), MP_ROM_PTR(&xbrut_x4_init_obj)},
+    {MP_ROM_QSTR(MP_QSTR_SDCard), MP_ROM_PTR(&xbrut_x4_sdcard_obj)},
+    {MP_ROM_QSTR(MP_QSTR_power_button), MP_ROM_PTR(&xbrut_x4_power_button_obj)},
+    {MP_ROM_QSTR(MP_QSTR_usb_present), MP_ROM_PTR(&xbrut_x4_usb_present_obj)},
+    {MP_ROM_QSTR(MP_QSTR_adc_raw), MP_ROM_PTR(&xbrut_x4_adc_raw_obj)},
+    {MP_ROM_QSTR(MP_QSTR_panel_reset), MP_ROM_PTR(&xbrut_x4_panel_reset_obj)},
+    {MP_ROM_QSTR(MP_QSTR_panel_clear), MP_ROM_PTR(&xbrut_x4_panel_clear_obj)},
+    {MP_ROM_QSTR(MP_QSTR_panel_refresh), MP_ROM_PTR(&xbrut_x4_panel_refresh_obj)},
+    {MP_ROM_QSTR(MP_QSTR_panel_refresh_fast), MP_ROM_PTR(&xbrut_x4_panel_refresh_fast_obj)},
+    {MP_ROM_QSTR(MP_QSTR_framebuffer_clear), MP_ROM_PTR(&xbrut_x4_framebuffer_clear_obj)},
+    {MP_ROM_QSTR(MP_QSTR_framebuffer_rect), MP_ROM_PTR(&xbrut_x4_framebuffer_rect_obj)},
+    {MP_ROM_QSTR(MP_QSTR_framebuffer_fill_rect), MP_ROM_PTR(&xbrut_x4_framebuffer_fill_rect_obj)},
+    {MP_ROM_QSTR(MP_QSTR_framebuffer_blit_portrait), MP_ROM_PTR(&xbrut_x4_framebuffer_blit_portrait_obj)},
+    {MP_ROM_QSTR(MP_QSTR_framebuffer_present), MP_ROM_PTR(&xbrut_x4_framebuffer_present_obj)},
+    {MP_ROM_QSTR(MP_QSTR_framebuffer_ready), MP_ROM_PTR(&xbrut_x4_framebuffer_ready_obj)},
+    {MP_ROM_QSTR(MP_QSTR_sleep), MP_ROM_PTR(&xbrut_x4_sleep_obj)}
+};
 static MP_DEFINE_CONST_DICT(xbrut_x4_globals, xbrut_x4_globals_table);
 const mp_obj_module_t xbrut_x4_module = {.base = {&mp_type_module}, .globals = (mp_obj_dict_t *)&xbrut_x4_globals};
 MP_REGISTER_MODULE(MP_QSTR_xbrut_x4, xbrut_x4_module);

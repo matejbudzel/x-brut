@@ -28,17 +28,16 @@ class Framebuffer:
         if 0 <= x < WIDTH and 0 <= y < HEIGHT:
             self.platform.pixel(x, y, on)
     def rect(self, x, y, width, height, on=True):
-        if not on:
-            self.platform.fill_rect(x, y, width, height, False)
-            return
-        for yy in range(y, y + height):
-            for xx in range(x, x + width): self.pixel(xx, yy, on)
+        right, bottom = min(WIDTH, x + width), min(HEIGHT, y + height)
+        x, y = max(0, x), max(0, y)
+        if right > x and bottom > y:
+            self.platform.fill_rect(x, y, right - x, bottom - y, on)
     def outline(self, x, y, width, height, on=True):
-        debug("framebuffer", "outline x=%d y=%d width=%d height=%d on=%s" % (x, y, width, height, on))
-        for xx in range(x, x + width):
-            self.pixel(xx, y, on); self.pixel(xx, y + height - 1, on)
-        for yy in range(y, y + height):
-            self.pixel(x, yy, on); self.pixel(x + width - 1, yy, on)
+        if width <= 0 or height <= 0: return
+        self.rect(x, y, width, 1, on)
+        self.rect(x, y + height - 1, width, 1, on)
+        self.rect(x, y, 1, height, on)
+        self.rect(x + width - 1, y, 1, height, on)
     def text(self, x, y, text, scale=1):
         # Font iteration allocates a small temporary object on CircuitPython.
         # Reclaim fragmented import/display allocations before the first UI
@@ -50,9 +49,17 @@ class Framebuffer:
         for char in text:
             code = ord(char) if ord(char) < 384 else ord("?")
             glyph = _SWEET16[code * 16:(code + 1) * 16]
-            for row, bits in enumerate(glyph):
-                for col in range(8):
-                    if bits & (128 >> col): self.rect(x + col * scale, y + row * scale, scale, scale)
+            if scale == 1 and 0 <= x <= WIDTH - 8 and 0 <= y <= HEIGHT - 16:
+                self.platform.blit(x, y, 8, 16, glyph)
+            else:
+                for row, bits in enumerate(glyph):
+                    start = None
+                    for col in range(9):
+                        black = col < 8 and bits & (128 >> col)
+                        if black and start is None: start = col
+                        if not black and start is not None:
+                            self.rect(x + start * scale, y + row * scale, (col - start) * scale, scale)
+                            start = None
             x += 8 * scale
 
     def text_bold(self, x, y, text, scale=1):

@@ -28,6 +28,6 @@ for STUB_PACKAGE in "$SITE_PACKAGES"/*-stubs; do
 done
 
 cd "$ROOT"
-"$ENVIRONMENT/bin/python" -m compileall -q device/CIRCUITPY xbrut tools tests
+"$ENVIRONMENT/bin/python" -m compileall -q device/CIRCUITPY native/micropython xbrut tools tests
 "$ENVIRONMENT/bin/pyright"
 "$ENVIRONMENT/bin/python" -m unittest discover -s tests -v

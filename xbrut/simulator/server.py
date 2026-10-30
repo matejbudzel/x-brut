@@ -446,7 +446,7 @@ def handler(sim):
             if self.path == "/api/screen":
                 self.send_response(200); self.send_header("Content-Type", "application/octet-stream"); self.send_header("Content-Length", str(len(sim.platform.frame))); self.end_headers(); self.wfile.write(sim.platform.frame); return
             if self.path == "/api/reload": return self.send_json({"revision": sim.revision})
-            if self.path == "/api/status": return self.send_json({"page": sim.ui.page, "focus": sim.ui.focus, "powered": sim.powered})
+            if self.path == "/api/status": return self.send_json({"page": sim.ui.page, "focus": sim.ui.focus, "powered": sim.powered, "buttons_only": getattr(sim, "buttons_only", False)})
             return super().do_GET()
         def do_POST(self):
             if self.path == "/api/battery":
@@ -468,11 +468,31 @@ def main():
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--ap-host", default="0.0.0.0", help="simulated AP bind address")
     parser.add_argument("--ap-port", type=int, default=8001, help="simulated AP port")
+    parser.add_argument("--portrait", action="store_true", help="preview migrated controller with deferred rendering")
     args = parser.parse_args()
     if not args.worker and not args.no_reload:
         from xbrut.simulator import reloader
-        return reloader.run(args, (os.path.join(ROOT, "xbrut"), os.path.join(ROOT, "device"), os.path.join(ROOT, "web")))
-    server = ThreadingHTTPServer((args.host, args.port), handler(Simulator(args.ap_host, args.ap_port)))
+        return reloader.run(args, (os.path.join(ROOT, "xbrut"), os.path.join(ROOT, "device"), os.path.join(ROOT, "native"), os.path.join(ROOT, "web")))
+    if args.portrait:
+        from xbrut.simulator.portrait import PortraitSimulator
+        sim = PortraitSimulator()
+        # HTTP handlers only enqueue button events. One thread owns model and
+        # render work, just as the device's cooperative loop does.
+        class PortraitHandler(handler(sim)):
+            def do_POST(self):
+                if self.path != "/api/button":
+                    self.send_error(400, "Only button input is supported in portrait preview")
+                    return
+                super().do_POST()
+        server = ThreadingHTTPServer((args.host, args.port), PortraitHandler)
+        def tick():
+            import time
+            while True:
+                sim.tick()
+                time.sleep(0.01)
+        threading.Thread(target=tick, daemon=True).start()
+    else:
+        server = ThreadingHTTPServer((args.host, args.port), handler(Simulator(args.ap_host, args.ap_port)))
     print("X Brut simulator: http://%s:%d" % (args.host, args.port)); server.serve_forever()
 
 if __name__ == "__main__": main()
