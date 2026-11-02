@@ -1,8 +1,10 @@
 """Bounded HTTP/1 settings transport, polled by the application's main loop."""
 import socket
+import gc
 import errno
 import select
 import time
+from xbrut_log import error
 
 HEADER_LIMIT = 2048
 BODY_LIMIT = 8192
@@ -25,7 +27,7 @@ class Client:
         self.input = bytearray()
         self.request = None
         self.response = None
-        self.part, self.sent = 0, 0
+        self.part, self.sent, self.chunk = 0, 0, None
 
 
 class Server:
@@ -55,10 +57,23 @@ class Server:
             stream.close()
             raise
 
+    def _close_body(self, client):
+        if client.response is not None and hasattr(client.response[1], 'close'):
+            client.response[1].close()
+        client.response, client.chunk = None, None
+
     def _drop(self, key):
         client = self.clients.pop(key)
-        self.poller.unregister(client.stream)
-        client.stream.close()
+        client.input, client.request = None, None
+        try:
+            self._close_body(client)
+        finally:
+            try:
+                self.poller.unregister(client.stream)
+            finally:
+                client.stream.close()
+        # Reclaim parsing/JSON buffers between requests on fragmented heaps.
+        gc.collect()
 
     def stop(self):
         for key in list(self.clients):
@@ -72,13 +87,24 @@ class Server:
         # Keep the static page separate; never concatenate a second page copy.
         header = ('HTTP/1.1 %d Response\r\nContent-Type: %s\r\nContent-Length: %d\r\n'
                   'Connection: close\r\nCache-Control: no-store\r\n'
-                  'X-Content-Type-Options: nosniff\r\n\r\n') % (status, content_type, len(body))
+                  'X-Content-Type-Options: nosniff\r\n\r\n') % (status, content_type, body.length if hasattr(body, 'read') else len(body))
         client.response = (header.encode(), body)
+        client.part, client.sent, client.chunk = 0, 0, None
         client.input = None
         self.poller.modify(client.stream, self.selector.POLLOUT)
 
     def _bad(self, client, status=400):
         self._reply(client, status, 'application/json', b'{"ok":false,"error":"Invalid HTTP request"}')
+
+    def _request_error(self, client, status, problem):
+        # Never log request contents, configuration, or exception arguments.
+        error('web', 'request failed type=%s status=%d' % (type(problem).__name__, status))
+        self._close_body(client)
+        client.input = None
+        gc.collect()
+        body = (b'{"ok":false,"error":"Server busy; retry the request"}' if status == 503
+                else b'{"ok":false,"error":"Settings request failed"}')
+        self._reply(client, status, 'application/json', body)
 
     def _receive(self, client):
         data = client.stream.recv(CHUNK)
@@ -129,15 +155,29 @@ class Server:
                 return True
         method, target, length = client.request
         if len(client.input) >= length:
+            body = None
             try:
                 status, content_type, body = self.handler(method, target, bytes(client.input[:length]))
                 self._reply(client, status, content_type, body)
-            except Exception:
-                self._reply(client, 500, 'application/json', b'{"ok":false,"error":"Settings request failed"}')
+            except Exception as problem:
+                if body is not None and hasattr(body, 'close'):
+                    body.close()
+                self._request_error(client, 503 if isinstance(problem, MemoryError) else 500, problem)
         return True
 
     def _send(self, client):
         part = client.response[client.part]
+        if client.part == 1 and hasattr(part, 'read'):
+            if client.chunk is None:
+                client.chunk = part.read(CHUNK)
+                if not client.chunk:
+                    return False
+            sent = client.stream.send(memoryview(client.chunk)[client.sent:])
+            if sent:
+                client.sent += sent
+            if client.sent == len(client.chunk):
+                client.sent, client.chunk = 0, None
+            return True
         if client.sent < len(part):
             sent = client.stream.send(memoryview(part)[client.sent:client.sent + CHUNK])
             if sent:
@@ -146,6 +186,33 @@ class Server:
             client.part += 1
             client.sent = 0
         return client.part < 2
+
+    def _accept(self, now):
+        stream = None
+        registered = False
+        try:
+            stream, _address = self.listener.accept()
+            if len(self.clients) >= CLIENT_LIMIT:
+                stream.close()
+                return
+            stream.setblocking(False)
+            client = Client(stream, now)
+            self.poller.register(stream, self.selector.POLLIN)
+            registered = True
+            self.clients[_key(stream)] = client
+        except MemoryError:
+            if stream is not None:
+                if registered:
+                    self.poller.unregister(stream)
+                stream.close()
+            gc.collect()
+        except OSError as problem:
+            if stream is not None:
+                if registered:
+                    self.poller.unregister(stream)
+                stream.close()
+            if not _would_block(problem):
+                raise
 
     def poll(self):
         if self.listener is None:
@@ -157,17 +224,7 @@ class Server:
         for event in self.poller.poll(0):
             key, flags = _key(event[0]), event[1]
             if key == _key(self.listener):
-                try:
-                    stream, _address = self.listener.accept()
-                    if len(self.clients) >= CLIENT_LIMIT:
-                        stream.close()
-                    else:
-                        stream.setblocking(False)
-                        self.clients[_key(stream)] = Client(stream, now)
-                        self.poller.register(stream, self.selector.POLLIN)
-                except OSError as problem:
-                    if not _would_block(problem):
-                        raise
+                self._accept(now)
                 continue
             client = self.clients.get(key)
             if client is None:
@@ -179,6 +236,16 @@ class Server:
                     alive = self._receive(client)
                 else:
                     alive = self._send(client)
+            except MemoryError as problem:
+                # A per-client allocation failure must not shut down Wi-Fi.
+                if client.response is None:
+                    try:
+                        self._request_error(client, 503, problem)
+                        alive = True
+                    except MemoryError:
+                        alive = False
+                else:
+                    alive = False
             except OSError as problem:
                 alive = _would_block(problem)
             if not alive:

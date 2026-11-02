@@ -1,5 +1,6 @@
 """One settings API/server for either an AP or a saved Wi-Fi connection."""
 import json
+import gc
 import os
 import time
 from xbrut_paths import BASE_CONFIG_PATH, PROJECT_CONFIG_PATH
@@ -9,9 +10,24 @@ BASE_KEYS = ('wifi_ssid', 'wifi_password', 'manifest_url', 'splash_url', 'ap_ssi
 PROJECT_KEYS = ('document_urls', 'document_manifests')
 
 
+class FileBody:
+    """Read an application asset in bounded chunks instead of importing it."""
+    def __init__(self, path):
+        self.length = os.stat(path)[6]
+        self.stream = open(path, 'rb')
+
+    def read(self, size):
+        return self.stream.read(size)
+
+    def close(self):
+        if self.stream is not None:
+            self.stream.close()
+            self.stream = None
+
+
 class SettingsStore:
-    def __init__(self, storage):
-        self.storage = storage
+    def __init__(self, storage, page_path="/base/settings.html"):
+        self.storage, self.page_path = storage, page_path
 
     def base(self):
         value = self.storage.read_json(BASE_CONFIG_PATH, {})
@@ -103,8 +119,7 @@ class SettingsStore:
 
     def route(self, method, path, body):
         if method == 'GET' and path == '/':
-            from ap_page import HTML
-            return 200, 'text/html; charset=utf-8', HTML
+            return 200, 'text/html; charset=utf-8', FileBody(self.page_path)
         if path != '/api/settings':
             return 404, 'application/json', b'{"ok":false,"error":"Not found"}'
         if method == 'GET':
@@ -125,8 +140,8 @@ class SettingsStore:
 
 class WebSettings:
     """Own explicit settings sessions; reuse already-connected interfaces."""
-    def __init__(self, storage, radio=None, clock=None, server_factory=None):
-        self.store = SettingsStore(storage)
+    def __init__(self, storage, radio=None, clock=None, server_factory=None, page_path="/base/settings.html"):
+        self.store = SettingsStore(storage, page_path=page_path)
         self.radio, self.clock = radio, clock or time
         self.server_factory, self.server = server_factory, None
         self.mode, self.failure = None, None
@@ -153,6 +168,11 @@ class WebSettings:
         self.mode, self.failure, self.phase = mode, None, 'connecting'
         self.started = self.clock.ticks_ms()
         try:
+            # Import/compile the transport before radio activation fragments
+            # the small device heap. Socket binding still waits for an IP.
+            if self.server is None:
+                self.server = self._make_server()
+            gc.collect()
             radio = self._radio()
             if mode == 'ap':
                 self.conf = self.store.ap_config()
@@ -232,7 +252,7 @@ class WebSettings:
             if addresses:
                 if self.server is None:
                     self.server = self._make_server()
-                    self.server.start()
+                self.server.start()
                 port = self.server.port
                 suffix = '' if port == 80 else ':' + str(port)
                 self.urls = tuple('http://' + address + suffix + '/' for address in addresses)

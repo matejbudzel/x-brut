@@ -13,7 +13,8 @@ from xbrut_lifecycle import Lifecycle, Device
 from xbrut_log import error
 
 
-def main():
+def create_runtime():
+    """Build the same application graph used by boot and hardware checks."""
     platform = X4Platform()
     mount_sd()
     ui = BaseUI(platform, deferred=True)
@@ -33,7 +34,13 @@ def main():
         if platform.ready(): ui.render_pending()
         return
     lifecycle = Lifecycle(controller, Device(platform), released=controls.released)
-    runtime = Runtime(controller, platform, controls, on_action=action, lifecycle=lifecycle)
+    return Runtime(controller, platform, controls, on_action=action, lifecycle=lifecycle)
+
+
+def main():
+    runtime = create_runtime()
+    if runtime is None:
+        return
     try:
         while True:
             runtime.step()
@@ -42,8 +49,8 @@ def main():
                 return
             time.sleep_ms(10)
     finally:
-        controller.stop_web(force=True)
+        runtime.controller.stop_web(force=True)
 
 
-
-main()
+if __name__ == "__main__":
+    main()

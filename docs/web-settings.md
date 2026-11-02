@@ -28,7 +28,8 @@ so saving a form does not disconnect the request that submitted it.
 `xbrut_network.Radio`, and a single `xbrut_http.Server`. The server binds all
 local interfaces; AP and station addresses use the same routes:
 
-- `GET /`: the shared `ap_page.HTML` settings page.
+- `GET /`: the shared settings page, staged from `ap_page.HTML` into the
+  read-only application asset `/base/settings.html`.
 - `GET /api/settings`: settings plus `storage_available`.
 - `POST /api/settings`: validate JSON and persist owned configuration keys.
 
@@ -46,6 +47,12 @@ transfer steps, 2 KiB headers, an 8 KiB request body limit, and a 10-second
 client deadline. Invalid/oversized requests and non-JSON settings posts return
 an error; passwords and request bodies are not logged. Interfaces and sockets
 are released on Back and on exit to the serial REPL.
+
+The page is read from flash in 512-byte chunks. It is never imported as a
+large Python literal on the device. Response files close on completion,
+disconnect, timeout, and session shutdown. A request allocation failure returns
+503 when possible and releases that client; it does not shut down Wi-Fi or
+the listener. Request diagnostics record exception types, without contents.
 
 The existing synchronous e-paper rendering and SD configuration writes remain
 small blocking operations. The server does not add a thread or an independent
@@ -68,7 +75,8 @@ persistence, schema validation before writes, missing credentials, connection
 failure/timeout, reuse of another feature's connection, session cleanup,
 fragmented HTTP, short writes, slow clients, limits, and navigation. Transport
 fakes also reproduce MicroPython's errno values and lack of bytearray slice
-deletion. A host HTTP smoke test exercises the real socket stack and shared
+deletion, fragmented-heap allocation failures, and streamed-file cleanup.
+A host HTTP smoke test exercises the real socket stack and shared
 controller/page/API.
 
 This feature uses Python files only and requires no new firmware build.
@@ -108,3 +116,25 @@ checks save/readback and reload persistence, and forces a network failure to
 verify visible errors and a usable retry button. It prints no credentials.
 The X4 full-form smoke also verified SD persistence and actual hotspot rename;
 the original device settings were restored after that temporary test.
+
+## Full-application memory checks — 2026-11-02
+
+The full portrait application reproduced a first-request failure while
+compiling `ap_page.py`: about 55 KB of free GC heap could not satisfy a
+3.6 KB contiguous allocation. Earlier isolated server checks did not reproduce
+that application heap. The staged HTML asset removes this allocation.
+
+`main.create_runtime()` constructs the normal application for hardware probes,
+so checks can exercise its actual imports, display, controls, and settings
+service together. Module precompilation is available through the staging
+tool's `--mpy-cross` option to avoid source-compiler peak allocations consuming
+native memory needed by Wi-Fi/lwIP. Use a compiler matching the installed
+MicroPython version. No firmware flash is involved.
+
+External page-transfer tests also exposed very little native free memory
+(roughly 8 KB before a request, less during it) and weak station signal
+around -82 dBm. Transfers remained intermittent even with TCP_NODELAY or
+station power saving disabled; neither workaround is included. The bytecode
+payload is built but its deployment and full-app verification are pending
+because SSH to gate became unreachable. Local validation passed 107 tests,
+Pyright, and the Chromium form regression.

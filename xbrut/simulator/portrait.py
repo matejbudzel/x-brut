@@ -2,6 +2,7 @@
 import os
 import time
 import uuid
+import tempfile
 from collections import deque
 from native.micropython.base.xbrut_boot import BootController
 from native.micropython.base.xbrut_runtime import Runtime
@@ -66,13 +67,21 @@ class PortraitSimulator:
         self.powered, self.sd_present, self.sd_reload_required = True, True, False
         self.revision = uuid.uuid4().hex
         self.events = deque()
+        self.assets = tempfile.TemporaryDirectory(prefix="xbrut-settings-")
+        page_path = os.path.join(self.assets.name, "settings.html")
+        with open(page_path, "wb") as page:
+            page.write(server.AP_HTML)
         web = WebSettings(self, radio=PreviewRadio(), clock=self.clock,
-                          server_factory=lambda handler: Server(handler, host=ap_host, port=ap_port, clock=self.clock))
+                          server_factory=lambda handler: Server(handler, host=ap_host, port=ap_port, clock=self.clock), page_path=page_path)
         self.controller = BootController(self.ui, lambda: self.project, storage=self, sd_root=self.root, sd_manager_api=sd_manager, web=web)
         lifecycle = Lifecycle(self.controller, PreviewDevice(self), clock=self.clock)
         self.runtime = Runtime(self.controller, self.platform, clock=self.clock, on_action=self.action, lifecycle=lifecycle)
         self.controller.start()
         self.tick()
+
+    def close(self):
+        self.controller.stop_web(force=True)
+        self.assets.cleanup()
 
     def read_json(self, path, default=None):
         return server.read_project_data(self.root + path[3:], default)

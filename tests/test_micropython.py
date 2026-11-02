@@ -269,6 +269,7 @@ class RuntimeTest(unittest.TestCase):
         for index in range(7): (docs/('%d.xth'%index)).touch()
         self.clock=Clock()
         self.sim=PortraitSimulator(self.temp.name,self.clock)
+        self.addCleanup(self.sim.close)
     def test_model_advances_while_busy_and_latest_screen_is_rendered(self):
         frame=self.sim.platform.frame
         self.sim.runtime.step(['down','down','down'])
@@ -514,9 +515,13 @@ class PayloadTest(unittest.TestCase):
             portrait=module.stage(Path(root)/'portrait','portrait')
             for path in ('main.py','xbrut_input.py','base/ui.py','base/framebuffer.py','base/sweet16mono.f8',
                          'base/xbrut_runtime.py','base/xbrut_boot.py','base/xbrut_hardware.py',
-                         'base/ap_page.py','base/xbrut_http.py','base/xbrut_web.py','base/xbrut_network.py','base/xbrut_lifecycle.py'):
+                         'base/settings.html','base/xbrut_http.py','base/xbrut_web.py','base/xbrut_network.py','base/xbrut_lifecycle.py'):
                 self.assertTrue((portrait/path).is_file(),path)
             self.assertEqual((portrait/'base/ui.py').read_bytes(),(ROOT/'device/CIRCUITPY/base/ui.py').read_bytes())
+            self.assertFalse((portrait/'base/ap_page.py').exists())
+            namespace = {}
+            exec((ROOT/'device/CIRCUITPY/base/ap_page.py').read_text(), namespace)
+            self.assertEqual((portrait/'base/settings.html').read_bytes(), namespace['HTML'])
             browser=module.stage(Path(root)/'browser','browser')
             self.assertEqual(sorted(p.name for p in browser.iterdir()),['main.py','xbrut_input.py'])
             with self.assertRaises(ValueError): module.stage(browser,'portrait')

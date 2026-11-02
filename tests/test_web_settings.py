@@ -1,6 +1,7 @@
 """Strict API/transport tests for AP and station settings sessions."""
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,12 +31,19 @@ class Storage:
 class SettingsTest(unittest.TestCase):
     def setUp(self):
         self.storage = Storage()
-        self.store = SettingsStore(self.storage)
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        namespace = {}
+        exec((ROOT / 'device/CIRCUITPY/base/ap_page.py').read_text(), namespace)
+        self.page = Path(self.temp.name) / 'settings.html'
+        self.page.write_bytes(namespace['HTML'])
+        self.store = SettingsStore(self.storage, page_path=str(self.page))
     def test_page_and_api_share_existing_schema(self):
         status, kind, page = self.store.route('GET', '/', b'')
         self.assertEqual(status, 200)
         self.assertIn('text/html', kind)
-        self.assertIn(b'/api/settings', page)
+        self.assertIn(b'/api/settings', page.read(10000))
+        page.close()
         incoming = {'wifi_ssid':'Home', 'wifi_password':'secret', 'manifest_url':' https://example.test/update ',
                     'ap_ssid':'Reader', 'ap_password':'abcdefgh', 'log_level':'info',
                     'document_urls':[' https://example.test/book '],
@@ -49,6 +57,14 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(settings['manifest_url'],'https://example.test/update')
         self.assertEqual(settings['document_manifests'],[{'name':'Books','url':'https://example.test/opds'}])
         self.assertEqual(self.storage.writes,['/sd/base-conf.json','/sd/project-conf.json'])
+    def test_page_is_file_backed_and_does_not_import_a_python_literal(self):
+        with patch.dict(sys.modules, {'ap_page': None}):
+            status, _, body = self.store.route('GET', '/', b'')
+        self.assertEqual(status, 200)
+        self.assertEqual(body.length, self.page.stat().st_size)
+        self.assertEqual(body.read(512), self.page.read_bytes()[:512])
+        body.close(); body.close()
+
     def test_validation_does_not_partially_save(self):
         for incoming in ({'log_level':'verbose'}, {'ap_password':'short'}, {'wifi_ssid':'x'*33},
                          {'wifi_password':True}, {'document_urls':'bad'}, {'document_manifests':[{'url':3}]},
@@ -244,6 +260,84 @@ class HTTPTest(unittest.TestCase):
             self.server.poll()
             if stream.closed: break
         return stream
+    def test_file_body_streams_in_bounded_chunks_with_short_writes(self):
+        class Body:
+            def __init__(self):
+                self.length, self.position, self.reads, self.closed = 6000, 0, [], False
+            def read(self, size):
+                self.reads.append(size)
+                self.assert_bounded = size <= 512
+                if size > 512: raise AssertionError('unbounded file read')
+                amount = min(size, self.length - self.position)
+                self.position += amount
+                return b'x' * amount
+            def close(self): self.closed = True
+        body = Body()
+        self.server.handler = lambda *args: (200, 'text/html', body)
+        stream = self.request(b'GET / HTTP/1.1\r\n\r\n')
+        self.assertTrue(stream.closed)
+        header, actual = bytes(stream.output).split(b'\r\n\r\n', 1)
+        self.assertIn(b'Content-Length: 6000', header)
+        self.assertEqual(actual, b'x' * 6000)
+        self.assertTrue(body.closed)
+        self.assertGreater(len(body.reads), 1)
+        self.assertTrue(all(size <= 512 for size in body.reads))
+
+    def test_open_body_is_closed_on_timeout_and_stop(self):
+        from native.micropython.base.xbrut_web import FileBody
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / 'page.html'; path.write_bytes(b'x' * 6000)
+            for stop in (False, True):
+                body = FileBody(str(path))
+                self.server.handler = lambda *args: (200, 'text/html', body)
+                class StalledStream(Stream):
+                    def send(self, data): raise OSError(11)
+                stream = self.request(b'', StalledStream(b'GET / HTTP/1.1\r\n\r\n'))
+                self.assertIsNotNone(body.stream)
+                if stop:
+                    self.server.stop()
+                else:
+                    self.clock.advance(CLIENT_TIMEOUT_MS); self.server.poll()
+                self.assertTrue(stream.closed)
+                self.assertIsNone(body.stream)
+
+    def test_handler_memory_error_is_contained_and_next_request_succeeds(self):
+        count = [0]
+        def handler(*args):
+            count[0] += 1
+            if count[0] == 1: raise MemoryError('fragmented heap')
+            return 200, 'text/plain', b'recovered'
+        self.server.handler = handler
+        first = self.request(b'GET / HTTP/1.1\r\n\r\n')
+        self.assertTrue(bytes(first.output).startswith(b'HTTP/1.1 503'))
+        self.assertFalse(self.listener.closed)
+        second = self.request(b'GET / HTTP/1.1\r\n\r\n')
+        self.assertTrue(bytes(second.output).endswith(b'recovered'))
+        self.assertTrue(second.closed)
+        self.assertFalse(self.server.clients)
+
+    def test_accept_memory_error_closes_client_but_not_listener(self):
+        from native.micropython.base import xbrut_http
+        def fail(*args): raise MemoryError('no client memory')
+        failed = Stream(b'GET / HTTP/1.1\r\n\r\n')
+        self.listener.queue.append(failed)
+        with patch.object(xbrut_http, 'Client', fail):
+            self.server.poll()
+        self.assertTrue(failed.closed)
+        self.assertFalse(self.listener.closed)
+        recovered = self.request(b'GET / HTTP/1.1\r\n\r\n')
+        self.assertTrue(bytes(recovered.output).startswith(b'HTTP/1.1 200'))
+
+    def test_receive_allocation_failure_does_not_stop_listener(self):
+        from native.micropython.base import xbrut_http
+        class LimitedBuffer(bytearray):
+            def extend(self, data): raise MemoryError('no input memory')
+        with patch.object(xbrut_http, 'bytearray', LimitedBuffer, create=True):
+            failed = self.request(b'GET / HTTP/1.1\r\n\r\n')
+        self.assertTrue(bytes(failed.output).startswith(b'HTTP/1.1 503'))
+        recovered = self.request(b'GET / HTTP/1.1\r\n\r\n')
+        self.assertTrue(bytes(recovered.output).startswith(b'HTTP/1.1 200'))
+
     def test_parser_works_without_bytearray_slice_deletion(self):
         from native.micropython.base import xbrut_http
         class MicroPythonBuffer(bytearray):

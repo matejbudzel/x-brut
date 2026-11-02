@@ -66,6 +66,9 @@ Stage into a new empty directory:
 ```sh
 python3 tools/stage-micropython.py --app portrait --output .tools/portrait-payload
 python3 tools/stage-micropython.py --app browser --output .tools/browser-payload
+# Recommended for the X4's limited RAM; use its matching compiler:
+python3 tools/stage-micropython.py --app portrait --output .tools/portrait-bytecode \
+  --mpy-cross /build/micropython-x4/mpy-cross/build/mpy-cross
 ```
 
 This only creates host files. It never touches a device. The portrait payload
@@ -88,6 +91,12 @@ installed, an application-only upload can copy the staged `base/` and input
 files with `mpremote`, then copy the selected `main.py` last and reset. Read
 back the entrypoint and critical modules before evaluating the display. Keep
 the staged browser payload available for rollback.
+
+With `--mpy-cross`, modules are staged as `.mpy` files while the boot
+entrypoint remains `main.py`. Verify the uploaded bytecode before removing
+the corresponding old `.py` files: source files take precedence on import.
+The settings page is an immutable `base/settings.html` asset streamed from
+flash; configuration and all other mutable state remain on `/sd`.
 
 The checkpoint scans local document names and supports grid/settings
 interaction and the SD file-tree manager. Opening a document and OTA/downloads still return

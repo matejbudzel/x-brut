@@ -75,7 +75,7 @@ def main():
         finally:
             stop.set()
             thread.join()
-            sim.controller.stop_web(force=True)
+            sim.close()
 
 
 if __name__ == '__main__':

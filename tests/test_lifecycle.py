@@ -29,6 +29,7 @@ class LifecycleTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.clock = Clock()
         self.sim = PortraitSimulator(root=self.temp.name, clock=self.clock)
+        self.addCleanup(self.sim.close)
         self.runtime = self.sim.runtime
         self.life = self.runtime.lifecycle
         self.device = RecordingDevice(self.sim)
