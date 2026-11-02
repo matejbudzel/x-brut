@@ -111,10 +111,12 @@ class SettingsStore:
             return 200, 'application/json', json.dumps(self.get()).encode()
         if method != 'POST':
             return 405, 'application/json', b'{"ok":false,"error":"Method not allowed"}'
+        info('web', 'settings POST received')
         try:
             self.save(json.loads(body.decode('utf-8')))
             return 200, 'application/json', b'{"ok":true}'
         except (ValueError, UnicodeError) as problem:
+            info('web', 'settings save rejected by validation')
             return 400, 'application/json', json.dumps({'ok': False, 'error': str(problem)}).encode()
         except Exception:
             error('web', 'settings save failed')
@@ -171,6 +173,16 @@ class WebSettings:
             self._failed(str(problem))
         except Exception:
             self._failed('COULD NOT START WIFI SETTINGS')
+
+    def close(self):
+        """Stop every interface/listener before sleep, reset, or REPL exit."""
+        if self.radio is not None:
+            self.own_ap = self.own_station = True
+        self._release()
+        if self.server is not None:
+            self.server.stop()
+            self.server = None
+        self.mode, self.failure, self.phase, self.urls = None, None, 'off', ()
 
     def _release(self):
         if self.radio is not None:

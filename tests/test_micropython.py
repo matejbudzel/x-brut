@@ -242,6 +242,17 @@ class InputTest(unittest.TestCase):
         self.clock.advance(700); self.assertEqual(self.actions.poll(),['left_long'])
         self.clock.advance(700); self.assertEqual(self.actions.poll(),[])
         self.assertEqual(self.settle(left=4095),[])
+    def test_power_held_through_wake_is_suppressed_until_released(self):
+        self.hardware.power = True
+        self.actions = Actions(self.input, clock=self.clock)
+        self.clock.advance(100)
+        self.assertEqual(self.actions.poll(), [])
+        self.assertFalse(self.actions.released())
+        self.assertEqual(self.settle(power=False), [])
+        self.assertTrue(self.actions.released())
+        self.assertEqual(self.settle(power=True), ['power'])
+        self.assertFalse(self.actions.released())
+
     def test_button_mapping(self):
         for name,config in CONFIG['buttons'].items():
             if name=='lower-1': continue
@@ -299,12 +310,8 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(self.sim.platform.frame,frame)
         self.clock.advance(250);self.sim.runtime.step()
         self.assertNotEqual(self.sim.platform.frame,frame)
-    def test_power_and_viewer_handoffs_can_return_back(self):
+    def test_viewer_handoff_can_return_back(self):
         self.sim.runtime.step(['down','confirm'])
-        self.assertEqual(self.sim.ui.page,'unavailable')
-        self.sim.runtime.step(['left'])
-        self.assertEqual((self.sim.ui.page,self.sim.ui.focus),('home',1))
-        self.sim.runtime.step(['power'])
         self.assertEqual(self.sim.ui.page,'unavailable')
         self.sim.runtime.step(['left'])
         self.assertEqual((self.sim.ui.page,self.sim.ui.focus),('home',1))
@@ -507,7 +514,7 @@ class PayloadTest(unittest.TestCase):
             portrait=module.stage(Path(root)/'portrait','portrait')
             for path in ('main.py','xbrut_input.py','base/ui.py','base/framebuffer.py','base/sweet16mono.f8',
                          'base/xbrut_runtime.py','base/xbrut_boot.py','base/xbrut_hardware.py',
-                         'base/ap_page.py','base/xbrut_http.py','base/xbrut_web.py','base/xbrut_network.py'):
+                         'base/ap_page.py','base/xbrut_http.py','base/xbrut_web.py','base/xbrut_network.py','base/xbrut_lifecycle.py'):
                 self.assertTrue((portrait/path).is_file(),path)
             self.assertEqual((portrait/'base/ui.py').read_bytes(),(ROOT/'device/CIRCUITPY/base/ui.py').read_bytes())
             browser=module.stage(Path(root)/'browser','browser')

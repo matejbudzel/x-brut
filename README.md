@@ -22,8 +22,9 @@ Put `.xtc`/`.xth` files in `.simulator/xviewer-docs/` to exercise the library.
 This checkpoint covers portrait drawing, library focus, settings, SD file-tree
 management, Back/long Back, and queued input during display BUSY. AP mode and
 Web settings serve the same settings page over a hotspot or saved Wi-Fi
-connection; see [web settings](docs/web-settings.md). Reader, OTA, reload,
-and sleep actions remain migration handoffs and show an unavailable screen.
+connection; see [web settings](docs/web-settings.md). Power, soft reload, and
+hard reload now execute the [device lifecycle](docs/device-lifecycle.md).
+Reader and OTA actions remain migration handoffs and show an unavailable screen.
 The preview simulates a 250 ms panel update; it does not predict physical refresh timing.
 
 See [portrait validation and staging](docs/micropython-portrait.md) before

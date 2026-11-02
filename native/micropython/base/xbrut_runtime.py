@@ -5,13 +5,14 @@ from xbrut_log import debug, error
 
 
 class Runtime:
-    def __init__(self, controller, platform, controls=None, clock=None, on_action=None, timeout_ms=30000):
+    def __init__(self, controller, platform, controls=None, clock=None, on_action=None, timeout_ms=30000, lifecycle=None):
         self.controller, self.ui = controller, controller.ui
         if not self.ui.deferred:
             raise ValueError("runtime requires deferred UI")
         self.platform, self.controls = platform, controls
         self.clock = clock or time
         self.on_action = on_action
+        self.lifecycle = lifecycle
         self.timeout_ms = timeout_ms
         self.wait_since = None
         self.display_error = None
@@ -22,11 +23,19 @@ class Runtime:
             events = self.controls.poll() if self.controls else ()
         actions = []
         for event in events:
+            if self.lifecycle is not None and self.lifecycle.sleeping:
+                if event == "power":
+                    self.lifecycle.wake()
+                continue
+            if self.lifecycle is not None and self.lifecycle.pending is not None:
+                continue
             debug("input", "dispatch %s at %d" % (event, self.clock.ticks_ms()))
             action = self.controller.handle(event)
             if action and action != "render":
                 actions.append(action)
-                if self.on_action:
+                if self.lifecycle is not None and action in ("sleep", "soft_reload", "hard_reload"):
+                    self.lifecycle.request(action)
+                elif self.on_action:
                     # Handoffs must schedule work, not run blocking network or
                     # lifecycle operations inside this input-dispatch pass.
                     self.on_action(action)
@@ -53,6 +62,8 @@ class Runtime:
                 self.ui.render_pending()
                 self.wait_since = self.clock.ticks_ms()
                 debug("display", "presented render_ms=%d" % self.clock.ticks_diff(self.wait_since, now))
+            elif self.lifecycle is not None:
+                self.lifecycle.poll()
         except Exception as problem:
             # Latch the fault; keep processing controls/model updates, but do
             # not reuse a buffer whose previous-frame synchronization failed.

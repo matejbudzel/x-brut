@@ -95,9 +95,12 @@ class BootController:
             if self.navigation.route in ("ap", "web_settings") and self.web.screen() != self._web_screen_state:
                 self._show_web()
 
-    def stop_web(self):
+    def stop_web(self, force=False):
         if self.web is not None:
-            self.web.stop()
+            if force:
+                self.web.close()
+            else:
+                self.web.stop()
         self._web_screen_state = None
 
     def _sd_unavailable(self, problem):

@@ -90,7 +90,7 @@ back the entrypoint and critical modules before evaluating the display. Keep
 the staged browser payload available for rollback.
 
 The checkpoint scans local document names and supports grid/settings
-interaction and the SD file-tree manager. Opening a document, OTA/downloads, reload, and sleep still return
+interaction and the SD file-tree manager. Opening a document and OTA/downloads still return
 an unavailable screen; Back returns to the prior route. Implementing the
 reader and lifecycle handoffs is the next milestone. The full legacy reader
 is available in the default simulator, not this checkpoint.
@@ -218,3 +218,22 @@ closed the hotspot and listener. The shared transport was also tested from a
 host HTTP client. Home-network authentication/DHCP and access from a separate
 wireless client remain user acceptance checks (credentials are entered through
 the page, not chat).
+
+### Saving feedback and device lifecycle — 2026-11-02
+
+The settings form now shows loading/saving/errors and verifies saved Wi-Fi/AP
+values by reading the API back before reporting success. It avoids the newer
+Object.fromEntries/FormData conversion dependency, uses explicit named fields,
+and displays AP password constraints. A full on-device form round-trip saved
+both home Wi-Fi and AP fields to SD, read them back, and reopened the renamed
+hotspot through the real WLAN API. Temporary test values were removed and the
+original user configuration restored. The user's original failed save could
+not be reproduced in current Chrome; testing that browser again remains
+necessary, now with visible failure feedback.
+
+Power/Sleep, Soft reload, and Hard reload are now implemented rather than
+unavailable handoffs. See [device lifecycle](device-lifecycle.md). Local
+validation passed 101 tests and Pyright. An actual Chromium form test passed
+save/readback, reload persistence, password validation, an older-browser API
+compatibility case, and visible reporting of a dropped request. Both reset
+operations were exercised successfully on the X4.

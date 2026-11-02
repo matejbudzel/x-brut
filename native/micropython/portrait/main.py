@@ -9,6 +9,7 @@ from xbrut_boot import BootController
 from xbrut_library import Library
 from xbrut_runtime import Runtime
 from xbrut_input import Input, Actions
+from xbrut_lifecycle import Lifecycle, Device
 from xbrut_log import error
 
 
@@ -20,7 +21,7 @@ def main():
     controller.start()
 
     def action(name):
-        # Reader/network/lifecycle handoffs are later migration milestones.
+        # Reader and OTA handoffs are later migration milestones.
         error("boot", "unsupported action " + name)
         controller.unavailable(name)
 
@@ -31,7 +32,8 @@ def main():
         ui.show("input_error", "BUTTON SETUP REQUIRED", ["RUN THE VALIDATION BROWSER"])
         if platform.ready(): ui.render_pending()
         return
-    runtime = Runtime(controller, platform, controls, on_action=action)
+    lifecycle = Lifecycle(controller, Device(platform), released=controls.released)
+    runtime = Runtime(controller, platform, controls, on_action=action, lifecycle=lifecycle)
     try:
         while True:
             runtime.step()
@@ -40,7 +42,7 @@ def main():
                 return
             time.sleep_ms(10)
     finally:
-        controller.stop_web()
+        controller.stop_web(force=True)
 
 
 

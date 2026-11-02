@@ -90,8 +90,15 @@ class Actions:
         self.back_ms = back_ms
         self.back_since = None
         self.back_long = False
-        self.power_candidate = self.power_active = False
+        # A key held through wake/reset must be released before it can
+        # request sleep again. Deep-sleep wake is level-triggered on the X4.
+        self.power_candidate = self.power_active = bool(self.controls.hardware.power_button())
         self.power_since = self.clock.ticks_ms()
+
+    def released(self):
+        return (not self.controls.hardware.power_button() and not self.power_active
+                and all(value is None for value in self.controls.active.values())
+                and all(value is None for value in self.controls.candidate.values()))
 
     def poll(self):
         changes, _states = self.controls.poll()

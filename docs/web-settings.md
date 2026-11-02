@@ -83,3 +83,28 @@ listener. It used a TCP client on the X4 against its own AP address; this does
 not replace testing from a phone or testing DHCP/authentication on a home
 network. Free MicroPython heap was about 57 KB with the AP active and 53 KB
 after the complete page/API sequence. The normal app was restarted afterwards.
+
+## Save feedback and browser checks
+
+The form disables Save while loading or saving. It shows validation/network
+failures explicitly and reads `/api/settings` back before displaying
+**Saved and verified**. Reload the page after an app update to get the new
+form. Keep the settings session open until this confirmation appears, then
+Back out and reopen the desired network mode to apply SSID/password changes.
+Home Wi-Fi credentials and hotspot credentials are separate fields; the
+hotspot password must contain at least eight characters.
+
+An optional real-browser regression test is available with Playwright and
+Chromium installed in a development environment:
+
+```sh
+python3 tools/smoke-web-settings-browser.py
+# Or select an existing Chromium executable:
+python3 tools/smoke-web-settings-browser.py --executable /path/to/chromium
+```
+
+It uses temporary data, disables Object.fromEntries to emulate older WebViews,
+checks save/readback and reload persistence, and forces a network failure to
+verify visible errors and a usable retry button. It prints no credentials.
+The X4 full-form smoke also verified SD persistence and actual hotspot rename;
+the original device settings were restored after that temporary test.

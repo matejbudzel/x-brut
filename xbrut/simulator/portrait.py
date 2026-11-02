@@ -9,6 +9,7 @@ from native.micropython.base.xbrut_library import Library
 from native.micropython.base import sd_manager
 from native.micropython.base.xbrut_web import WebSettings
 from native.micropython.base.xbrut_http import Server
+from native.micropython.base.xbrut_lifecycle import Lifecycle
 from xbrut.simulator import server
 
 
@@ -44,6 +45,15 @@ class PreviewRadio:
     def stop_station(self): self.station = False
 
 
+class PreviewDevice:
+    def __init__(self, sim): self.sim = sim
+    def flush(self): pass
+    def sleep(self): self.sim.powered = False
+    def soft_reload(self): self.sim.powered = True
+    def hard_reload(self): self.sim.powered = True
+    def wake(self): self.sim.powered = True
+
+
 class PortraitSimulator:
     buttons_only = True
 
@@ -59,7 +69,8 @@ class PortraitSimulator:
         web = WebSettings(self, radio=PreviewRadio(), clock=self.clock,
                           server_factory=lambda handler: Server(handler, host=ap_host, port=ap_port, clock=self.clock))
         self.controller = BootController(self.ui, lambda: self.project, storage=self, sd_root=self.root, sd_manager_api=sd_manager, web=web)
-        self.runtime = Runtime(self.controller, self.platform, clock=self.clock, on_action=self.action)
+        lifecycle = Lifecycle(self.controller, PreviewDevice(self), clock=self.clock)
+        self.runtime = Runtime(self.controller, self.platform, clock=self.clock, on_action=self.action, lifecycle=lifecycle)
         self.controller.start()
         self.tick()
 
