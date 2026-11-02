@@ -112,3 +112,38 @@ Do not change the panel driver based solely on portrait composition failures.
 Any necessary hardware diagnostic should be isolated and preserve the browser
 rollback path. This checkpoint does not establish a usable reader MVP until
 reading, bookmarks, and sleep/wake have passed on the X4.
+
+## Deployment on gate — 2026-11-02
+
+The X4 is accessible from the development host with `ssh gate`; its serial
+port on that VM is `/dev/ttyACM0`. The VM user belongs to `dialout`.
+`esptool` 5.6.0 and `mpremote` 1.29.0 are installed in the isolated environment
+`/home/matej/.local/share/xbrut-tools`.
+
+Deployment artifacts and the serial smoke/upload scripts are retained on gate
+under `/home/matej/.local/share/xbrut-deploy/20261102-a2ad6a2/`. This includes
+the prior boot/input source files, the portrait payload, and the browser
+recovery payload. The firmware was built on the development host under
+`/build`; no toolchain was installed on gate.
+
+The deployed application image is from the October 30 clean build of
+`a2ad6a2`, SHA-256
+`311f0f6f6a31e049913d44f22cdd85b090e67ed7be2bf380678f8103de0b9a9d`.
+It was written at `0x10000` only; esptool verified the write. The bootloader,
+partition table, application filesystem, and SD data were retained. The 16
+portrait application files were uploaded with `main.py` last and checked
+against device SHA-256 hashes.
+
+Local validation was rerun successfully (68 tests, zero Pyright errors).
+Serial checks on the X4 passed module-registry imports, the required drawing
+API, SD mounting (29.1 GiB), six calibrated controls, and Home → Settings →
+Home. Warm presentation checks completed in approximately 207/477/215 ms
+respectively, with about 105 KB free heap after collection. These durations
+are serial/controller observations, not visual confirmation or a cold-start
+benchmark. The library directory was empty, so grid navigation was not yet
+exercised on hardware. A subsequent normal reboot produced no traceback or
+runtime display fault in the captured startup output.
+
+Visible panel output and physical button behavior still require user
+confirmation. The reader and sleep/wake handoffs remain unimplemented in this
+checkpoint.
