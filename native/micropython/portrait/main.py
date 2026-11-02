@@ -13,8 +13,8 @@ from xbrut_log import error
 
 
 def main():
-    mount_sd()
     platform = X4Platform()
+    mount_sd()
     ui = BaseUI(platform, deferred=True)
     controller = BootController(ui, project_loader=Library)
     controller.start()

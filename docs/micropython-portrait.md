@@ -126,7 +126,8 @@ the prior boot/input source files, the portrait payload, and the browser
 recovery payload. The firmware was built on the development host under
 `/build`; no toolchain was installed on gate.
 
-The deployed application image is from the October 30 clean build of
+The initial application image (superseded by the initialization fix below)
+was from the October 30 clean build of
 `a2ad6a2`, SHA-256
 `311f0f6f6a31e049913d44f22cdd85b090e67ed7be2bf380678f8103de0b9a9d`.
 It was written at `0x10000` only; esptool verified the write. The bootloader,
@@ -147,3 +148,37 @@ runtime display fault in the captured startup output.
 Visible panel output and physical button behavior still require user
 confirmation. The reader and sleep/wake handoffs remain unimplemented in this
 checkpoint.
+
+### Follow-up: stale image caused by chip-select ownership
+
+The initial visual check failed: the panel retained its old landscape image.
+Runtime logs showed that physical button events were reaching Settings and
+its actions, so the apparently unresponsive controls were a stale-display
+symptom. A standalone native white clear returned in only 124 ms.
+
+The portrait entry mounted SD before constructing `X4Platform`. SD setup
+configured the panel chip-select as an SPI output, but the constructor's
+subsequent `xbrut_x4.init()` called `gpio_config(GPIO_MODE_OUTPUT)` on that
+same pin. ESP-IDF's `gpio_output_enable()` resets the pin's GPIO-matrix output
+selection to ordinary GPIO, disconnecting SPI chip-select and leaving it high.
+This bypassed the desktop fake, whose native initializer had no GPIO effects.
+
+The fix initializes the platform before mounting SD and makes native init
+preserve all panel output pins once SPI owns them. No panel waveform or SPI
+transfer code changed. The added regression compiles the production native
+initializer with GPIO fakes and checks pin ownership before/after SPI setup.
+All 69 local tests and Pyright pass; the incremental firmware build succeeds.
+
+The corrected firmware is retained on gate as `micropython-init-fix.bin`,
+SHA-256
+`0bb1b084fab20ab58026c0925a51665c67a104707832c28694a5064afbbd0ca9`,
+with the corrected boot source as `init-fix-main.py`. The write at `0x10000`
+was verified, and the corrected `main.py` was uploaded. A transient serial
+stall after the firmware reset was recovered with esptool's USB reset
+sequence (`--before usb-reset --after hard-reset chip-id`), without an erase.
+
+The repeated smoke sequence completed Home/Settings/Home in approximately
+580/847/589 ms with stable free heap, followed by a normal reboot without a
+traceback. The increase over the initial false-positive timings is consistent
+with actual panel BUSY activity now being observed. Visual confirmation after
+this fix is still pending; serial timings alone do not establish image quality.

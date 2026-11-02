@@ -76,11 +76,38 @@ class PortraitRasterTest(unittest.TestCase):
         source.write_text('#include "raster.h"\n'
             'void rect(uint8_t *p,int x,int y,int w,int h,bool b){x4_raster_rect(p,x,y,w,h,b);}\n'
             'void blit(uint8_t *p,int x,int y,int w,int h,const uint8_t *s){x4_raster_blit_portrait(p,x,y,w,h,s);}\n')
+        # Compile the production initializer with GPIO/SPI ownership fakes.
+        # gpio_config(output) disconnects the SPI signal on ESP-IDF, so count
+        # every output reconfiguration before and after SPI claims the pins.
+        native_source = (ROOT / "native/micropython/xbrut_x4/xbrut_x4.c").read_text()
+        begin = native_source.index("static mp_obj_t xbrut_x4_init(void)")
+        end = native_source.index("static MP_DEFINE_CONST_FUN_OBJ_0", begin)
+        with source.open("a") as handle:
+            handle.write("\n" + "\n".join([
+                "typedef void *mp_obj_t;",
+                "#define mp_const_none NULL",
+                "#define X4_PANEL_DC_GPIO 4",
+                "#define X4_PANEL_RESET_GPIO 5",
+                "#define X4_PANEL_CS_GPIO 21",
+                "#define X4_POWER_BUTTON_GPIO 3",
+                "#define X4_USB_PRESENT_GPIO 20",
+                "#define GPIO_PULLUP_ONLY 1",
+                "#define GPIO_FLOATING 0",
+                "static bool spi_ready;",
+                "static unsigned output_mask;",
+                "static void x4_output(int pin,int value){(void)value;output_mask|=1u<<pin;}",
+                "static void x4_input(int pin,int pull){(void)pin;(void)pull;}",
+                "static void x4_setup_adc(void){}",
+                native_source[begin:end],
+                "unsigned initialize(bool ready){spi_ready=ready;output_mask=0;xbrut_x4_init();return output_mask;}",
+            ]))
         library = Path(cls.temp.name) / "raster.so"
         subprocess.run(["cc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-shared", "-fPIC", "-I",
                         str(ROOT / "native/micropython/xbrut_x4"), str(source), "-o", str(library)], check=True)
         cls.raster = ctypes.CDLL(str(library))
         pointer = ctypes.POINTER(ctypes.c_uint8)
+        cls.raster.initialize.argtypes = [ctypes.c_bool]
+        cls.raster.initialize.restype = ctypes.c_uint
         cls.raster.rect.argtypes = [pointer] + [ctypes.c_int]*4 + [ctypes.c_bool]
         cls.raster.blit.argtypes = [pointer] + [ctypes.c_int]*4 + [pointer]
         cls.raster.rect.restype = cls.raster.blit.restype = None
@@ -89,6 +116,11 @@ class PortraitRasterTest(unittest.TestCase):
     def setUp(self):
         self.native = NativePanel(self.raster)
         self.platform = X4Platform(self.native)
+
+    def test_repeated_native_init_preserves_spi_pin_ownership(self):
+        self.assertEqual(self.raster.initialize(False), (1 << 4) | (1 << 5) | (1 << 21))
+        self.assertEqual(self.raster.initialize(True), 0)
+        self.assertEqual(self.raster.initialize(True), 0)
 
     def test_old_firmware_is_rejected_before_a_partial_render(self):
         self.native.framebuffer_blit_portrait = None

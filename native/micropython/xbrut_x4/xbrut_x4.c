@@ -150,7 +150,20 @@ MP_DEFINE_CONST_OBJ_TYPE(x4_sdcard_type, MP_QSTR_SDCard, MP_TYPE_FLAG_NONE, loca
 static mp_obj_t xbrut_x4_sdcard(void) { x4_setup_spi(); return MP_OBJ_FROM_PTR(&x4_sdcard); }
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_sdcard_obj, xbrut_x4_sdcard);
 
-static mp_obj_t xbrut_x4_init(void) { x4_output(X4_PANEL_DC_GPIO, 0); x4_output(X4_PANEL_RESET_GPIO, 1); x4_output(X4_PANEL_CS_GPIO, 1); x4_input(X4_POWER_BUTTON_GPIO, GPIO_PULLUP_ONLY); x4_input(X4_USB_PRESENT_GPIO, GPIO_FLOATING); x4_setup_adc(); return mp_const_none; }
+static mp_obj_t xbrut_x4_init(void) {
+    // gpio_config(output) disconnects a peripheral's GPIO-matrix signal.
+    // After SD has initialized shared SPI, CS belongs to the SPI driver;
+    // repeating init must not turn it into a permanently-high GPIO output.
+    if (!spi_ready) {
+        x4_output(X4_PANEL_DC_GPIO, 0);
+        x4_output(X4_PANEL_RESET_GPIO, 1);
+        x4_output(X4_PANEL_CS_GPIO, 1);
+    }
+    x4_input(X4_POWER_BUTTON_GPIO, GPIO_PULLUP_ONLY);
+    x4_input(X4_USB_PRESENT_GPIO, GPIO_FLOATING);
+    x4_setup_adc();
+    return mp_const_none;
+}
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_init_obj, xbrut_x4_init);
 static mp_obj_t xbrut_x4_power_button(void) { return mp_obj_new_bool(gpio_get_level(X4_POWER_BUTTON_GPIO) == 0); }
 static MP_DEFINE_CONST_FUN_OBJ_0(xbrut_x4_power_button_obj, xbrut_x4_power_button);
