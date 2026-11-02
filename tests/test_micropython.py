@@ -316,6 +316,91 @@ class RuntimeTest(unittest.TestCase):
         self.assertIsInstance(self.sim.runtime.display_error,OSError)
         self.assertEqual(self.sim.platform.frame,frame)
 
+    def open_sd_manager(self):
+        self.sim.runtime.step(['left'])
+        index = next(i for i, action in enumerate(self.sim.ui.actions) if action[1] == 'manage_sd')
+        while self.sim.ui.focus != index:
+            self.sim.runtime.step(['down'])
+        self.sim.runtime.step(['confirm'])
+        self.assertEqual(self.sim.ui.page, 'sd_manager')
+        return index
+
+    def settle_display(self):
+        self.clock.advance(250)
+        self.sim.tick()
+        self.clock.advance(250)
+        self.sim.tick()
+
+    def test_sd_manager_opens_navigates_and_restores_settings_focus(self):
+        index = self.open_sd_manager()
+        self.assertEqual(self.sim.controller.manager.__class__.__module__, 'native.micropython.base.sd_manager')
+        self.assertTrue(self.sim.controller.manager.rows)
+        frame = self.sim.platform.frame
+        self.sim.runtime.step(['down', 'down'])
+        self.assertEqual(self.sim.controller.manager.focus, 2)
+        self.assertEqual(self.sim.platform.frame, frame)
+        self.settle_display()
+        self.assertNotEqual(self.sim.platform.frame, frame)
+        self.sim.runtime.step(['left'])
+        self.assertEqual((self.sim.ui.page, self.sim.ui.focus), ('settings', index))
+        self.assertIsNone(self.sim.controller.manager)
+
+    def test_sd_delete_requires_presented_dialog_and_back_cancels(self):
+        self.open_sd_manager()
+        selected = Path(self.sim.controller.manager.selected()['path'])
+        self.sim.runtime.step(['confirm', 'confirm'])
+        self.assertTrue(self.sim.controller.manager.modal)
+        self.assertTrue(selected.exists())
+        self.sim.runtime.step(['confirm'])
+        self.assertTrue(selected.exists())
+        self.settle_display()
+        self.sim.runtime.step(['left'])
+        self.assertEqual(self.sim.ui.page, 'sd_manager')
+        self.assertFalse(self.sim.controller.manager.modal)
+        self.assertTrue(selected.exists())
+        self.sim.runtime.step(['left_long'])
+        self.assertEqual(self.sim.ui.page, 'home')
+        self.assertIsNone(self.sim.controller.manager)
+
+    def test_sd_delete_after_confirmation_only_removes_selected_temporary_item(self):
+        self.open_sd_manager()
+        selected = Path(self.sim.controller.manager.selected()['path'])
+        self.sim.runtime.step(['confirm'])
+        self.settle_display()
+        self.sim.runtime.step(['confirm'])
+        self.assertFalse(selected.exists())
+        self.assertTrue(Path(self.temp.name).is_dir())
+        self.assertEqual(self.sim.ui.page, 'sd_manager')
+        self.assertFalse(self.sim.controller.manager.modal)
+
+    def test_sd_card_loss_during_confirmation_returns_read_only_home(self):
+        self.open_sd_manager()
+        selected = Path(self.sim.controller.manager.selected()['path'])
+        self.sim.runtime.step(['confirm'])
+        self.settle_display()
+        self.sim.sd_present = False
+        self.sim.runtime.step(['confirm'])
+        self.assertTrue(selected.exists())
+        self.assertEqual(self.sim.ui.page, 'home')
+        self.assertTrue(self.sim.ui.read_only)
+        self.assertIsNone(self.sim.controller.manager)
+
+    def test_sd_manager_handles_failed_open_and_empty_tree(self):
+        with patch('native.micropython.base.sd_manager.os.listdir', side_effect=OSError('card removed')):
+            self.sim.runtime.step(['left'])
+            index = next(i for i, action in enumerate(self.sim.ui.actions) if action[1] == 'manage_sd')
+            self.sim.ui.focus = index
+            self.sim.runtime.step(['confirm'])
+        self.assertEqual(self.sim.ui.page, 'home')
+        self.assertTrue(self.sim.ui.read_only)
+        with tempfile.TemporaryDirectory() as empty:
+            self.sim.ui.read_only = False
+            self.sim.controller.sd_root = empty
+            self.open_sd_manager()
+            self.assertEqual(self.sim.controller.manager.rows, [])
+            self.sim.runtime.step(['confirm', 'down', 'left'])
+            self.assertEqual(self.sim.ui.page, 'settings')
+
     def test_read_only_boot(self):
         self.sim.toggle_sd()
         self.assertTrue(self.sim.ui.read_only)

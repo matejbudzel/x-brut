@@ -7,7 +7,7 @@ import gc
 
 from navigation import Navigation
 from xbrut_log import configure, debug, error as log_error, info
-from xbrut_paths import BASE_CONFIG_PATH
+from xbrut_paths import BASE_CONFIG_PATH, DATA_ROOT
 
 
 def load_project(root=""):
@@ -31,10 +31,12 @@ def load_project(root=""):
 
 class BootController:
     """Base route policy; renderer and hardware calls stay in the caller."""
-    def __init__(self, ui, project_loader=load_project, storage=None):
+    def __init__(self, ui, project_loader=load_project, storage=None, sd_root=DATA_ROOT, sd_manager_api=None):
         if storage is None:
             import xbrut_storage
             storage = xbrut_storage
+        self.sd_root, self.sd_manager_api = sd_root, sd_manager_api
+        self.manager, self._delete_ready = None, False
         self.storage = storage
         self.ui = ui
         self.project_loader = project_loader
@@ -57,6 +59,7 @@ class BootController:
 
     def _home(self):
         self.navigation.home()
+        self.manager, self._delete_ready = None, False
         self.ui.home(self.project)
 
     def _back(self):
@@ -65,8 +68,48 @@ class BootController:
             return
         if entry["route"] == "settings":
             self._settings(entry["state"].get("focus", 0))
+        elif entry["route"] == "sd_manager" and self.manager is not None:
+            self.ui.sd_manager(self.manager)
         else:
             self.ui.home(self.project, entry["state"].get("focus", 0))
+
+    def _sd_unavailable(self, problem):
+        log_error("boot", "SD manager unavailable: %r" % problem)
+        self.ui.read_only = True
+        self._home()
+
+    def _open_sd_manager(self):
+        if self.sd_manager_api is None:
+            import sd_manager
+            self.sd_manager_api = sd_manager
+        try:
+            self.manager = self.sd_manager_api.SDManager(self.sd_root, self.storage.sd_available)
+            self._delete_ready = False
+            self.ui.sd_manager(self.manager)
+        except self.sd_manager_api.SDCardError as problem:
+            self._sd_unavailable(problem)
+
+    def display_ready(self):
+        # Called only after a submitted screen has finished presentation.
+        if self.navigation.route == "sd_manager" and self.manager is not None and self.manager.modal:
+            self._delete_ready = True
+
+    def _sd_button(self, button):
+        if button == "left" and not self.manager.modal:
+            self.manager, self._delete_ready = None, False
+            self._back()
+            return "render"
+        # Coalesced input must not confirm a deletion before its dialog has
+        # actually completed presentation. A second quick press is ignored.
+        if self.manager.modal and button in ("confirm", "button_2") and not self._delete_ready:
+            return "render"
+        try:
+            self.manager.button(button)
+            self._delete_ready = False
+            self.ui.sd_manager(self.manager)
+        except self.sd_manager_api.SDCardError as problem:
+            self._sd_unavailable(problem)
+        return "render"
 
     def unavailable(self, action):
         """Fallback for handoffs not implemented by the portrait checkpoint."""
@@ -88,6 +131,8 @@ class BootController:
         if button == "left_long":
             self._home()
             return "render"
+        if self.navigation.route == "sd_manager" and self.manager is not None:
+            return self._sd_button(button)
         if button == "left":
             if self.navigation.route == "home":
                 self.navigation.update(focus=self.ui.focus)
@@ -108,7 +153,12 @@ class BootController:
         result = self.ui.button(button)
         if not result:
             return None
-        if result in ("ota", "splash", "ap", "download_all", "manage_sd"):
+        if result == "manage_sd":
+            self.navigation.update(focus=self.ui.focus)
+            self.navigation.push("sd_manager")
+            self._open_sd_manager()
+            return "render"
+        if result in ("ota", "splash", "ap", "download_all"):
             self.navigation.update(focus=self.ui.focus)
             self.navigation.push(result, {})
             return result

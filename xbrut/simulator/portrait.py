@@ -6,6 +6,7 @@ from collections import deque
 from native.micropython.base.xbrut_boot import BootController
 from native.micropython.base.xbrut_runtime import Runtime
 from native.micropython.base.xbrut_library import Library
+from native.micropython.base import sd_manager
 from xbrut.simulator import server
 
 
@@ -41,7 +42,7 @@ class PortraitSimulator:
         self.powered, self.sd_present, self.sd_reload_required = True, True, False
         self.revision = uuid.uuid4().hex
         self.events = deque()
-        self.controller = BootController(self.ui, lambda: self.project, storage=self)
+        self.controller = BootController(self.ui, lambda: self.project, storage=self, sd_root=self.root, sd_manager_api=sd_manager)
         self.runtime = Runtime(self.controller, self.platform, clock=self.clock, on_action=self.action)
         self.controller.start()
         self.tick()

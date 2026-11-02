@@ -3,8 +3,9 @@
 The unfinished experiments from September are preserved at
 [`archive/pre-mvp-experiments-2026-10-30`](https://github.com/matejbudzel/x-brut/tree/archive/pre-mvp-experiments-2026-10-30),
 including the original recovery review. Main starts from the last confirmed
-landscape browser and adds the portrait/application boundary. This checkpoint
-has no real-device acceptance yet.
+landscape browser and adds the portrait/application boundary. Portrait rendering and
+Settings navigation have been confirmed on the real X4; reader and lifecycle
+acceptance remain outstanding.
 
 ## What changed
 
@@ -89,7 +90,7 @@ back the entrypoint and critical modules before evaluating the display. Keep
 the staged browser payload available for rollback.
 
 The checkpoint scans local document names and supports grid/settings
-interaction. Opening a document, networking, reload, and sleep still return
+interaction and the SD file-tree manager. Opening a document, networking, reload, and sleep still return
 an unavailable screen; Back returns to the prior route. Implementing the
 reader and lifecycle handoffs is the next milestone. The full legacy reader
 is available in the default simulator, not this checkpoint.
@@ -180,5 +181,27 @@ sequence (`--before usb-reset --after hard-reset chip-id`), without an erase.
 The repeated smoke sequence completed Home/Settings/Home in approximately
 580/847/589 ms with stable free heap, followed by a normal reboot without a
 traceback. The increase over the initial false-positive timings is consistent
-with actual panel BUSY activity now being observed. Visual confirmation after
-this fix is still pending; serial timings alone do not establish image quality.
+with actual panel BUSY activity now being observed. The user subsequently confirmed that Settings navigation works on the panel.
+Serial timings alone do not establish image quality.
+
+### SD manager integration — 2026-11-02
+
+Manage SD card now opens the migrated `SDManager` in both the portrait app and
+preview, using the same boot controller. The tree is bounded to 50 items and
+three directory levels. Side/lower navigation moves focus; OK opens the
+existing delete dialog, Back cancels it, and Back from the tree restores the
+Settings selection. Long Back returns Home. Card failure returns to read-only
+Home. A queued second OK cannot delete an item until the confirmation dialog
+has completed presentation.
+
+The update changes Python only; it uses the existing firmware. Local tests
+exercise the actual migrated manager through the controller/runtime, including
+navigation, empty/unavailable SD, dialog cancellation, and confirmed deletion
+of temporary host fixtures. Device verification uses navigation and cancellation
+only, without deleting files.
+
+On-device smoke passed with 51 bounded tree rows and approximately 97 KB free
+heap while the tree was open: open → move → show delete dialog → cancel → Back
+restored the Settings focus. Both updated modules were verified by device
+SHA-256 hashes. Deployment artifacts are retained on gate under
+`/home/matej/.local/share/xbrut-deploy/20261102-sd-manager/`.

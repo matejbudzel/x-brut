@@ -19,8 +19,8 @@ python3 run_simulator.py --portrait
 ```
 
 Put `.xtc`/`.xth` files in `.simulator/xviewer-docs/` to exercise the library.
-This checkpoint covers portrait drawing, library focus, settings, Back/long
-Back, and queued input during display BUSY. Reader, network, and sleep actions
+This checkpoint covers portrait drawing, library focus, settings, SD file-tree
+management, Back/long Back, and queued input during display BUSY. Reader, network, and sleep actions
 are still migration handoffs and show an unavailable screen. The preview
 simulates a 250 ms panel update; it does not predict physical refresh timing.
 

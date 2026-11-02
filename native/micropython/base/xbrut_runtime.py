@@ -43,6 +43,8 @@ class Runtime:
             if self.wait_since is not None:
                 debug("display", "ready after %d ms" % self.clock.ticks_diff(now, self.wait_since))
                 self.wait_since = None
+                if not self.ui.pending:
+                    self.controller.display_ready()
             if self.ui.pending:
                 gc.collect()
                 heap = gc.mem_free() if hasattr(gc, "mem_free") else -1
