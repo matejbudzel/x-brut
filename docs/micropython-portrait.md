@@ -90,7 +90,7 @@ back the entrypoint and critical modules before evaluating the display. Keep
 the staged browser payload available for rollback.
 
 The checkpoint scans local document names and supports grid/settings
-interaction and the SD file-tree manager. Opening a document, networking, reload, and sleep still return
+interaction and the SD file-tree manager. Opening a document, OTA/downloads, reload, and sleep still return
 an unavailable screen; Back returns to the prior route. Implementing the
 reader and lifecycle handoffs is the next milestone. The full legacy reader
 is available in the default simulator, not this checkpoint.
@@ -205,3 +205,16 @@ heap while the tree was open: open → move → show delete dialog → cancel �
 restored the Settings focus. Both updated modules were verified by device
 SHA-256 hashes. Deployment artifacts are retained on gate under
 `/home/matej/.local/share/xbrut-deploy/20261102-sd-manager/`.
+
+### AP and station web settings — 2026-11-02
+
+AP mode and the new Web settings action now share the settings page/API.
+Both start only when selected, show a URL, and stop their session on Back.
+See [web settings](web-settings.md) for setup and the shared networking
+lifecycle. The app polls HTTP alongside input; no firmware update is required.
+
+The real-device AP/page/API smoke passed over the X4's socket stack; Back
+closed the hotspot and listener. The shared transport was also tested from a
+host HTTP client. Home-network authentication/DHCP and access from a separate
+wireless client remain user acceptance checks (credentials are entered through
+the page, not chat).

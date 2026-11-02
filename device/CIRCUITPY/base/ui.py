@@ -187,7 +187,7 @@ class BaseUI:
         self._label_centered(470, 372, self.side_labels[0], rotated=(self.side_labels[0] == "v"))
         self._label_centered(470, 412, self.side_labels[1])
 
-    def settings(self, project, focus=0, sd_status=""):
+    def settings(self, project, focus=0, sd_status="", web_settings=False):
         info("ui", "settings requested focus=%d" % focus)
         name = getattr(project, "PROJECT_NAME", "- NO PROJECT INSTALLED -") if project else "- NO PROJECT INSTALLED -"
         version = getattr(project, "PROJECT_VERSION", "") if project else ""
@@ -198,6 +198,8 @@ class BaseUI:
             try: lines.append(("Battery: ", "%d%%" % self.platform.battery_status()[0]))
             except Exception: pass
         actions = [("CHECK OTA", "ota"), ("UPDATE SPLASH SCREEN", "splash"), ("AP MODE", "ap")]
+        if web_settings:
+            actions.append(("WEB SETTINGS", "web_settings"))
         if project and hasattr(project, "config"):
             urls = project.config().get("document_urls", [])
             actions.append((project.PROJECT_NAME, "section"))

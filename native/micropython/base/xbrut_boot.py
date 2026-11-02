@@ -31,10 +31,11 @@ def load_project(root=""):
 
 class BootController:
     """Base route policy; renderer and hardware calls stay in the caller."""
-    def __init__(self, ui, project_loader=load_project, storage=None, sd_root=DATA_ROOT, sd_manager_api=None):
+    def __init__(self, ui, project_loader=load_project, storage=None, sd_root=DATA_ROOT, sd_manager_api=None, web=None):
         if storage is None:
             import xbrut_storage
             storage = xbrut_storage
+        self.web, self._web_screen_state = web, None
         self.sd_root, self.sd_manager_api = sd_root, sd_manager_api
         self.manager, self._delete_ready = None, False
         self.storage = storage
@@ -55,9 +56,10 @@ class BootController:
         return self.project
 
     def _settings(self, focus=0):
-        self.ui.settings(self.project, focus=focus, sd_status=self.storage.sd_card_status())
+        self.ui.settings(self.project, focus=focus, sd_status=self.storage.sd_card_status(), web_settings=True)
 
     def _home(self):
+        self.stop_web()
         self.navigation.home()
         self.manager, self._delete_ready = None, False
         self.ui.home(self.project)
@@ -68,10 +70,35 @@ class BootController:
             return
         if entry["route"] == "settings":
             self._settings(entry["state"].get("focus", 0))
+        elif entry["route"] in ("ap", "web_settings"):
+            self._show_web()
         elif entry["route"] == "sd_manager" and self.manager is not None:
             self.ui.sd_manager(self.manager)
         else:
             self.ui.home(self.project, entry["state"].get("focus", 0))
+
+    def _open_web(self, mode):
+        if self.web is None:
+            from xbrut_web import WebSettings
+            self.web = WebSettings(self.storage)
+        self.web.start(mode)
+        self._show_web()
+
+    def _show_web(self):
+        title, lines = self.web.screen()
+        self._web_screen_state = (title, lines)
+        self.ui.show(self.navigation.route, title, lines, bottom_labels=("Back", "", "", ""), side_labels=("", ""))
+
+    def poll_services(self):
+        if self.web is not None:
+            self.web.poll()
+            if self.navigation.route in ("ap", "web_settings") and self.web.screen() != self._web_screen_state:
+                self._show_web()
+
+    def stop_web(self):
+        if self.web is not None:
+            self.web.stop()
+        self._web_screen_state = None
 
     def _sd_unavailable(self, problem):
         log_error("boot", "SD manager unavailable: %r" % problem)
@@ -121,7 +148,7 @@ class BootController:
     def handle(self, button):
         """Apply one normalized button event and return an external action.
 
-        Return values such as ``sleep``, ``ota``, and ``sd_manager`` are
+        Return values such as ``sleep``, ``ota``, and ``download_all`` are
         deliberately executed by the platform-specific loop, not here.
         """
         if not button:
@@ -134,6 +161,10 @@ class BootController:
         if self.navigation.route == "sd_manager" and self.manager is not None:
             return self._sd_button(button)
         if button == "left":
+            if self.navigation.route in ("ap", "web_settings"):
+                self.stop_web()
+                self._back()
+                return "render"
             if self.navigation.route == "home":
                 self.navigation.update(focus=self.ui.focus)
                 self.navigation.push("settings", {"focus": 0})
@@ -153,12 +184,17 @@ class BootController:
         result = self.ui.button(button)
         if not result:
             return None
+        if result in ("ap", "web_settings"):
+            self.navigation.update(focus=self.ui.focus)
+            self.navigation.push(result)
+            self._open_web("ap" if result == "ap" else "station")
+            return "render"
         if result == "manage_sd":
             self.navigation.update(focus=self.ui.focus)
             self.navigation.push("sd_manager")
             self._open_sd_manager()
             return "render"
-        if result in ("ota", "splash", "ap", "download_all"):
+        if result in ("ota", "splash", "download_all"):
             self.navigation.update(focus=self.ui.focus)
             self.navigation.push(result, {})
             return result

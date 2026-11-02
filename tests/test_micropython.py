@@ -316,6 +316,49 @@ class RuntimeTest(unittest.TestCase):
         self.assertIsInstance(self.sim.runtime.display_error,OSError)
         self.assertEqual(self.sim.platform.frame,frame)
 
+    def open_web_settings(self, action):
+        from tests.test_web_settings import FakeServer
+        self.sim.controller.web.server_factory = FakeServer
+        self.sim.runtime.step(['left'])
+        index = next(i for i, item in enumerate(self.sim.ui.actions) if item[1] == action)
+        while self.sim.ui.focus != index:
+            self.sim.runtime.step(['down'])
+        self.sim.runtime.step(['confirm'])
+        return index
+
+    def test_ap_service_starts_on_selection_and_back_stops_it(self):
+        web = self.sim.controller.web
+        self.assertFalse(web.radio.ap)
+        self.assertIsNone(web.server)
+        index = self.open_web_settings('ap')
+        self.assertEqual(self.sim.ui.page, 'ap')
+        self.assertTrue(web.radio.ap)
+        self.assertTrue(web.server.started)
+        self.assertTrue(any('http://' in line for line in self.sim.ui.lines))
+        self.sim.runtime.step(['left'])
+        self.assertEqual((self.sim.ui.page, self.sim.ui.focus), ('settings', index))
+        self.assertFalse(web.radio.ap)
+        self.assertIsNone(web.server)
+        self.sim.runtime.step(['confirm', 'left_long'])
+        self.assertEqual(self.sim.ui.page, 'home')
+        self.assertFalse(web.radio.ap)
+
+    def test_station_web_settings_shows_missing_credentials_then_saved_wifi(self):
+        web = self.sim.controller.web
+        index = self.open_web_settings('web_settings')
+        self.assertEqual(self.sim.ui.page, 'web_settings')
+        self.assertIn('NO SAVED WIFI', '\n'.join(self.sim.ui.lines))
+        self.assertFalse(web.radio.station)
+        self.sim.runtime.step(['left'])
+        self.assertEqual(self.sim.ui.focus, index)
+        web.store.save({'wifi_ssid': 'Home', 'wifi_password': 'password'})
+        self.sim.runtime.step(['confirm'])
+        self.assertTrue(web.radio.station)
+        self.assertEqual(web.phase, 'ready')
+        self.sim.runtime.step(['left_long'])
+        self.assertFalse(web.radio.station)
+        self.assertEqual(self.sim.ui.page, 'home')
+
     def open_sd_manager(self):
         self.sim.runtime.step(['left'])
         index = next(i for i, action in enumerate(self.sim.ui.actions) if action[1] == 'manage_sd')
@@ -463,7 +506,8 @@ class PayloadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             portrait=module.stage(Path(root)/'portrait','portrait')
             for path in ('main.py','xbrut_input.py','base/ui.py','base/framebuffer.py','base/sweet16mono.f8',
-                         'base/xbrut_runtime.py','base/xbrut_boot.py','base/xbrut_hardware.py'):
+                         'base/xbrut_runtime.py','base/xbrut_boot.py','base/xbrut_hardware.py',
+                         'base/ap_page.py','base/xbrut_http.py','base/xbrut_web.py','base/xbrut_network.py'):
                 self.assertTrue((portrait/path).is_file(),path)
             self.assertEqual((portrait/'base/ui.py').read_bytes(),(ROOT/'device/CIRCUITPY/base/ui.py').read_bytes())
             browser=module.stage(Path(root)/'browser','browser')

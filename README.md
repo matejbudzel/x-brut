@@ -1,15 +1,15 @@
 # X Brut
 
-X Brut is a deliberately small CircuitPython base for the Xteink X4.  The base
-owns recovery, power, splash, settings, Wi-Fi setup and OTA.  A separately
-downloaded `project.py` owns the reader itself; the first project will be an
-XTH-only viewer.
+X Brut is a small Python base for the Xteink X4. Current device development
+uses a custom MicroPython hardware layer with a portable settings, storage,
+and networking UI. The older CircuitPython application remains a reference
+for the reader and OTA features still being migrated.
 
 ## Migration status
 
 The supported development direction is MicroPython with the native X4 panel/SD
-module. The last device-confirmed baseline is the landscape validation browser.
-The full CircuitPython reader below remains a reference implementation.
+module. Portrait rendering, button navigation, and SD management have been
+checked on the X4. The landscape validation browser remains the recovery app.
 
 The new portrait checkpoint shares its UI, boot controller, and cooperative
 render loop with a desktop preview:
@@ -20,9 +20,11 @@ python3 run_simulator.py --portrait
 
 Put `.xtc`/`.xth` files in `.simulator/xviewer-docs/` to exercise the library.
 This checkpoint covers portrait drawing, library focus, settings, SD file-tree
-management, Back/long Back, and queued input during display BUSY. Reader, network, and sleep actions
-are still migration handoffs and show an unavailable screen. The preview
-simulates a 250 ms panel update; it does not predict physical refresh timing.
+management, Back/long Back, and queued input during display BUSY. AP mode and
+Web settings serve the same settings page over a hotspot or saved Wi-Fi
+connection; see [web settings](docs/web-settings.md). Reader, OTA, reload,
+and sleep actions remain migration handoffs and show an unavailable screen.
+The preview simulates a 250 ms panel update; it does not predict physical refresh timing.
 
 See [portrait validation and staging](docs/micropython-portrait.md) before
 using this checkpoint on hardware. The default simulator and default firmware

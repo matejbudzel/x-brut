@@ -32,12 +32,16 @@ def main():
         if platform.ready(): ui.render_pending()
         return
     runtime = Runtime(controller, platform, controls, on_action=action)
-    while True:
-        runtime.step()
-        if runtime.display_error is not None:
-            print("X Brut display stopped:", repr(runtime.display_error))
-            return
-        time.sleep_ms(10)
+    try:
+        while True:
+            runtime.step()
+            if runtime.display_error is not None:
+                print("X Brut display stopped:", repr(runtime.display_error))
+                return
+            time.sleep_ms(10)
+    finally:
+        controller.stop_web()
+
 
 
 main()

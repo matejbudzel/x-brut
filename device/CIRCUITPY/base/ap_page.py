@@ -35,6 +35,7 @@ button { padding:0 .8rem; }
   <button class="wide" type="button" id="add-manifest">Add OPDS feed</button>
   <div id="urls"></div>
   <button class="wide" type="button" id="add">Add URL</button>
+  <p>Wi-Fi and AP changes apply when you reopen the settings session.</p>
   <p><button>Save</button> <span id="status"></span></p>
 </form>
 <script>

@@ -475,7 +475,7 @@ def main():
         return reloader.run(args, (os.path.join(ROOT, "xbrut"), os.path.join(ROOT, "device"), os.path.join(ROOT, "native"), os.path.join(ROOT, "web")))
     if args.portrait:
         from xbrut.simulator.portrait import PortraitSimulator
-        sim = PortraitSimulator()
+        sim = PortraitSimulator(ap_host=args.ap_host, ap_port=args.ap_port)
         # HTTP handlers only enqueue button events. One thread owns model and
         # render work, just as the device's cooperative loop does.
         class PortraitHandler(handler(sim)):

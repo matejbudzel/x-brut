@@ -30,6 +30,7 @@ class Runtime:
                     # Handoffs must schedule work, not run blocking network or
                     # lifecycle operations inside this input-dispatch pass.
                     self.on_action(action)
+        self.controller.poll_services()
         if self.display_error is not None:
             return actions
         now = self.clock.ticks_ms()

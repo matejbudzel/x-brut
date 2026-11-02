@@ -20,7 +20,7 @@ def stage(output, app):
         base.mkdir()
         for source in (native / "base").glob("*.py"):
             shutil.copy2(source, base / source.name)
-        for name in ("__init__.py", "ui.py", "framebuffer.py", "sweet16mono.f8", "SWEET16-LICENSE.txt"):
+        for name in ("__init__.py", "ui.py", "framebuffer.py", "ap_page.py", "sweet16mono.f8", "SWEET16-LICENSE.txt"):
             shutil.copy2(ROOT / "device" / "CIRCUITPY" / "base" / name, base / name)
     return output
 

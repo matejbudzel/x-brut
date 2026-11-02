@@ -7,6 +7,8 @@ from native.micropython.base.xbrut_boot import BootController
 from native.micropython.base.xbrut_runtime import Runtime
 from native.micropython.base.xbrut_library import Library
 from native.micropython.base import sd_manager
+from native.micropython.base.xbrut_web import WebSettings
+from native.micropython.base.xbrut_http import Server
 from xbrut.simulator import server
 
 
@@ -30,10 +32,22 @@ class BusyPlatform(server.Platform):
         self.until = self.clock.ticks_ms() + self.busy_ms
 
 
+class PreviewRadio:
+    """Simulated radio; HTTP itself runs on the host's real socket stack."""
+    def __init__(self): self.ap, self.station = False, False
+    def start_ap(self, ssid, password): self.ap = True
+    def connect(self, ssid, password): self.station = True
+    def ap_address(self): return "127.0.0.1" if self.ap else None
+    def station_address(self): return "127.0.0.1" if self.station else None
+    def station_error(self): return None
+    def stop_ap(self): self.ap = False
+    def stop_station(self): self.station = False
+
+
 class PortraitSimulator:
     buttons_only = True
 
-    def __init__(self, root=None, clock=None):
+    def __init__(self, root=None, clock=None, ap_host="0.0.0.0", ap_port=8001):
         self.root = root or server.SIMULATOR_DATA
         self.clock = clock or Clock()
         self.platform = BusyPlatform(self.clock)
@@ -42,12 +56,23 @@ class PortraitSimulator:
         self.powered, self.sd_present, self.sd_reload_required = True, True, False
         self.revision = uuid.uuid4().hex
         self.events = deque()
-        self.controller = BootController(self.ui, lambda: self.project, storage=self, sd_root=self.root, sd_manager_api=sd_manager)
+        web = WebSettings(self, radio=PreviewRadio(), clock=self.clock,
+                          server_factory=lambda handler: Server(handler, host=ap_host, port=ap_port, clock=self.clock))
+        self.controller = BootController(self.ui, lambda: self.project, storage=self, sd_root=self.root, sd_manager_api=sd_manager, web=web)
         self.runtime = Runtime(self.controller, self.platform, clock=self.clock, on_action=self.action)
         self.controller.start()
         self.tick()
 
-    def read_json(self, _path, default=None): return default
+    def read_json(self, path, default=None):
+        return server.read_project_data(self.root + path[3:], default)
+
+    def write_json(self, path, value):
+        if not self.sd_present:
+            raise RuntimeError("SD card unavailable")
+        if path not in ("/sd/base-conf.json", "/sd/project-conf.json"):
+            raise ValueError("unsupported simulator settings path")
+        server.write_project_data(self.root + path[3:], value)
+
     def sd_available(self): return self.sd_present
     def sd_card_status(self): return "simulated" if self.sd_present else "none"
 
